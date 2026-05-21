@@ -123,7 +123,7 @@ For `dinov2` and `siglip` the LDM is the upstream
 [Scale-RAE](https://github.com/ZitengWangNYU/Scale-RAE) (text-conditional
 256px) repo — see the optional-deps section below for installation.
 
-Single-GPU example (Flux):
+#### Example 1 — Single-GPU, single prompt (Flux, default `2k` decoder)
 
 ```bash
 PYTHONPATH=. python -m pid._src.inference.from_ldm_flux \
@@ -133,7 +133,10 @@ PYTHONPATH=. python -m pid._src.inference.from_ldm_flux \
     --cfg_scale 1 --pid_inference_steps 4 --scale 4
 ```
 
-Same backbone at 1024² LDM → 4K decode (switches to the `2kto4k` checkpoint):
+#### Example 2 — Single-GPU, 4K decode (Flux, `2kto4k` decoder)
+
+Same backbone as Example 1 but with `--resolution 1024 --pid_ckpt_type 2kto4k`,
+so the LDM produces a 1024² latent and PiD decodes it to 4K.
 
 ```bash
 PYTHONPATH=. python -m pid._src.inference.from_ldm_flux \
@@ -144,7 +147,10 @@ PYTHONPATH=. python -m pid._src.inference.from_ldm_flux \
     --cfg_scale 1 --pid_inference_steps 4 --scale 4
 ```
 
-Multi-GPU example with a prompt file (Z-Image):
+#### Example 3 — Multi-GPU with a prompt file (Z-Image)
+
+`torchrun` shards `--prompt_file` across ranks; each rank writes to
+`--output_dir` independently.
 
 ```bash
 PYTHONPATH=. torchrun --nproc_per_node=4 \
@@ -155,13 +161,15 @@ PYTHONPATH=. torchrun --nproc_per_node=4 \
     --cfg_scale 1 --pid_inference_steps 4 --scale 4
 ```
 
+#### `dinov2` / `siglip` backbones
 
-For the `dinov2` and `siglip` backbones (upstream RAE / Scale-RAE LDMs that
-don't live in `diffusers`), see [`docs/dinov2_siglip.md`](docs/dinov2_siglip.md)
-for setup and end-to-end examples.
+The upstream RAE / Scale-RAE LDMs don't live in `diffusers` — see
+[`docs/dinov2_siglip.md`](docs/dinov2_siglip.md) for setup and end-to-end
+examples.
 
-Suggested `--ldm_inference_steps` / `--save_xt_steps` per diffusers backbone
-(see each script's docstring for the exact recipe):
+#### Suggested step settings per diffusers backbone
+
+(See each script's docstring for the exact recipe.)
 
 | Backbone | LDM steps flag          | Default steps | `--save_xt_steps` (example) | Best LDM termination steps |
 |----------|-------------------------|---------------|-----------------------------|----------------------|
@@ -170,6 +178,7 @@ Suggested `--ldm_inference_steps` / `--save_xt_steps` per diffusers backbone
 | flux2    | `--ldm_inference_steps` | 50            | `40 42 44 46 48`         | 46  |
 | zimage   | `--ldm_inference_steps` | 50            | `40 42 44 46 48`         | 46  |
 
+---
 ### `from_clean_*`: image → VAE encode → PiD decode
 
 No latent diffusion model is run. The input image is encode by VAE,
