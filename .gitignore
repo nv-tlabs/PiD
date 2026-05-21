@@ -85,9 +85,6 @@ tmp/
 temp/
 *.mp4
 
-# Assets
-assets/
-
 debug/
 raw_data
 raw_data/
