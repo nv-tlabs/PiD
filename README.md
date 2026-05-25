@@ -24,7 +24,7 @@ space and produces a super-resolved image in one pass.
 [Xuanchi Ren](https://xuanchiren.com/) <br>
 
 ## News
-- 🚀 [May 25, 2026] Paper, code, and model weights released, with PiD options for **FLUX**, **FLUX.2**, **Z-Image**, **SD3**, **DINOv2**, and **SigLIP**.
+- 🚀 [May 25, 2026] Paper, code, and model weights released, with PiD options for **FLUX**, **FLUX.2**, **Z-Image**, **Z-Image-Turbo**, **SD3**, **DINOv2**, and **SigLIP**.
 - 🔜 [Coming Soon] PiD option for **Qwen-Image**.
 - 🔜 [Coming Soon] PiD undistilled checkpoints.
 - ⏳ [Planned] Training scripts.
@@ -32,7 +32,7 @@ space and produces a super-resolved image in one pass.
 ## Installation
 
 > [!TIP]
-> **Quick Start** — if your environment already has PyTorch (with CUDA), `transformers>=4.57.x`, and `diffusers>=0.37`, you don't need to build a new conda env. Just install the small set of utility deps the inference code pulls eagerly and you're ready to run the diffusers backbones (`flux`/`flux2`/`sd3`/`zimage`):
+> **Quick Start** — if your environment already has PyTorch (with CUDA), `transformers>=4.57.x`, and `diffusers>=0.37`, you don't need to build a new conda env. Just install the small set of utility deps the inference code pulls eagerly and you're ready to run the diffusers backbones (`flux`/`flux2`/`sd3`/`zimage`/`zimage_turbo`):
 >
 > ```bash
 > pip install hydra-core==1.3.2 omegaconf==2.3.0 \
@@ -82,6 +82,7 @@ PiD ships two complementary entry points per backbone:
 | flux2    | `from_clean_flux2.py`   | `from_ldm_flux2.py`   |
 | sd3      | `from_clean_sd3.py`     | `from_ldm_sd3.py`     |
 | zimage   | reuses `flux`           | `from_ldm_zimage.py`  |
+| zimage_turbo | reuses `flux`       | `from_ldm_zimage_turbo.py` |
 | dinov2   | `from_clean_dinov2.py`  | `from_ldm_dinov2.py`  |
 | siglip   | `from_clean_siglip.py`  | `from_ldm_siglip.py`  |
 
@@ -93,7 +94,7 @@ twice — once with the backbone's native VAE (baseline) and once with PiD.
 > Every entry point accepts `--pid_ckpt_type {2k,2kto4k}` (default `2k`):
 >
 > - **`2k`** — the original 2048px-trained decoder.
-> - **`2kto4k`** — the up-to-4K-resolution decoder. > > Available for `flux` / `flux2` / `sd3` / `zimage` only. Worse than `2k` at 2048px resolution.
+> - **`2kto4k`** — the up-to-4K-resolution decoder. Available for `flux` / `flux2` / `sd3` / `zimage` / `zimage_turbo` only. Worse than `2k` at 2048px resolution.
 >
 > For the exact checkpoint path for each backbone, see [docs/checkpoints.md](docs/checkpoints.md).
 > A quick sanity check that the right variant loaded: when `2kto4k` is active you
@@ -107,7 +108,7 @@ the class-conditional `dinov2` backbone), captures the intermediate `x_t` at
 user-specified denoising steps (early LDM termination) and the final clean `x_0`, then decodes
 each captured latent with both the native VAE / RAE decoder (baseline) and PiD.
 
-For `flux` / `flux2` / `sd3` / `zimage` the LDM is a HuggingFace `diffusers`
+For `flux` / `flux2` / `sd3` / `zimage` / `zimage_turbo` the LDM is a HuggingFace `diffusers`
 pipeline (`FluxPipeline`, `Flux2Pipeline`, `StableDiffusion3Pipeline`,
 `ZImagePipeline`).
 
@@ -154,6 +155,22 @@ PYTHONPATH=. torchrun --nproc_per_node=4 \
     --cfg_scale 1 --pid_inference_steps 4 --scale 4
 ```
 
+#### Example 4 — Multi-GPU, 1K to 4K decode (Z-Image-Turbo, `2kto4k` decoder)
+
+Z-Image-Turbo defaults to 9 diffusers steps with `guidance_scale=0.0`. The final
+clean latent `x0` is always saved and is the recommended Turbo output to inspect.
+`--save_xt_steps 7` is optional; it saves an additional near-final `x_t` sample
+for comparison.
+
+```bash
+PYTHONPATH=. torchrun --nproc_per_node=8 \
+    -m pid._src.inference.from_ldm_zimage_turbo \
+    --prompt_file pid/_src/inference/prompts/prompt_zimage_turbo.txt \
+    --resolution 1024 --pid_ckpt_type 2kto4k \
+    --output_dir ./results/official_demo/zimage_turbo_4k \
+    --cfg_scale 1 --pid_inference_steps 4 --scale 4
+```
+
 #### `dinov2` / `siglip` backbones
 
 The upstream RAE / Scale-RAE LDMs don't live in `diffusers` — see
@@ -164,12 +181,13 @@ examples.
 
 (See each script's docstring for the exact recipe.)
 
-| Backbone | LDM steps flag          | Default steps | `--save_xt_steps` (example) | Best `--save_xt_steps` |
-|----------|-------------------------|---------------|-----------------------------|----------------------|
-| flux     | `--ldm_inference_steps` | 28            | `22 24 26`         | 24  |
-| sd3      | `--ldm_inference_steps` | 28            | `22 24 26`         | 24  |
-| flux2    | `--ldm_inference_steps` | 50            | `44 46 48`         | 46  |
-| zimage   | `--ldm_inference_steps` | 50            | `44 46 48`         | 46  |
+| Backbone | LDM steps flag          | Default steps | Optional `--save_xt_steps` | Recommended latent |
+|----------|-------------------------|---------------|----------------------------|--------------------|
+| flux     | `--ldm_inference_steps` | 28            | `22 24 26`                 | step `24`          |
+| sd3      | `--ldm_inference_steps` | 28            | `22 24 26`                 | step `24`          |
+| flux2    | `--ldm_inference_steps` | 50            | `44 46 48`                 | step `46`          |
+| zimage   | `--ldm_inference_steps` | 50            | `44 46 48`                 | step `46`          |
+| zimage_turbo | `--ldm_inference_steps` | 9         | `7`                        | `x0`               |
 
 ---
 ### 📗 `from_clean_*`: image → VAE encode → PiD decode
@@ -214,7 +232,7 @@ of the prompts / manifest entries and writes to `--output_dir` independently.
 
 ```
 pid/_src/inference/
-├── from_ldm_{flux,flux2,sd3,zimage,dinov2,siglip}.py  # text/class → LDM → PiD decode
+├── from_ldm_{flux,flux2,sd3,zimage,zimage_turbo,dinov2,siglip}.py  # text/class → LDM → PiD decode
 ├── from_clean_{flux,flux2,sd3,dinov2,siglip}.py       # image → encode → PiD decode
 ├── _demo_common.py                                    # shared CLI + run loop for from_ldm_*
 ├── _demo_from_clean_common.py                         # shared CLI + run loop for from_clean_*

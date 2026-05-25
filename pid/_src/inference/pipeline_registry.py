@@ -4,7 +4,7 @@ Registry of diffusers pipelines for FPD-vs-VAE evaluation on generated images.
 Each DiffusionPipelineConfig describes how to load a diffusers pipeline, extract
 latents in (B, C, H, W) format, denormalize them, and decode with the pipeline's VAE.
 
-Supported backbones: flux, sdxl, sd3, flux2, qwenimage, zimage.
+Supported backbones: flux, sdxl, sd3, flux2, qwenimage, zimage, zimage_turbo.
 
 Latent normalization conventions:
   - Flux/SDXL/SD3: simple affine scale+shift  →  raw = latent / scale + shift
@@ -12,7 +12,7 @@ Latent normalization conventions:
     (running stats stored in AutoencoderKLFlux2.latent_norm)
   - QwenImage: per-channel mean/std  →  raw = latent * std + mean
     (vectors stored in pipeline.vae.config.latents_mean / latents_std)
-  - ZImage: affine scale+shift read from pipeline.vae.config at runtime
+  - ZImage/ZImage-Turbo: affine scale+shift read from pipeline.vae.config at runtime
     (vae_scale_factor=0 in registry signals runtime lookup)
 
 Diffusers `output_type="latent"` returns the denoised latent in the *normalized*
@@ -146,6 +146,24 @@ PIPELINE_REGISTRY: dict[str, DiffusionPipelineConfig] = {
         default_resolution=(1024, 1024),
         default_num_inference_steps=50,
         default_guidance_scale=5.0,
+        extra_generate_kwargs={"max_sequence_length": 512},
+    ),
+    "zimage_turbo": DiffusionPipelineConfig(
+        name="zimage_turbo",
+        pipeline_class="diffusers.ZImagePipeline",
+        default_model_id="Tongyi-MAI/Z-Image-Turbo",
+        latent_channels=16,
+        spatial_compression=8,
+        # ZImage-Turbo shares ZImage's VAE/latent convention. Runtime values are
+        # read from pipeline.vae.config by denormalize_latent().
+        vae_scale_factor=0.0,
+        vae_shift_factor=0.0,
+        default_resolution=(1024, 1024),
+        # The model card describes Turbo as an 8-NFE distilled model. Diffusers'
+        # example uses num_inference_steps=9, yielding 8 non-zero scheduler jumps
+        # followed by the terminal sigma=0 sample.
+        default_num_inference_steps=9,
+        default_guidance_scale=0.0,
         extra_generate_kwargs={"max_sequence_length": 512},
     ),
 }

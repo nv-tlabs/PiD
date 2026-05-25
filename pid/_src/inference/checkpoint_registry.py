@@ -18,6 +18,7 @@
 #   flux2      Flux2-dev (128-ch BN VAE)                 LDM + from_clean   (2k + 2kto4k)
 #   sd3        SD3 medium (16-ch VAE)                    LDM + from_clean   (2k + 2kto4k)
 #   zimage     ZImage (Flux1's 16-ch VAE)                LDM only — reuses Flux1 model (2k + 2kto4k)
+#   zimage_turbo  ZImage-Turbo (same 16-ch VAE)          LDM only — reuses Flux1 model (2k + 2kto4k)
 #   rae        DINOv2-B + RAE ViT-XL (768-ch RAE)        LDM + from_clean   (2k only, sr4x)
 #   scale_rae  SigLIP-2 So400M + Scale-RAE ViT-XL        LDM + from_clean   (2k only, sr8x)
 #
@@ -88,9 +89,12 @@ PID_CHECKPOINT_REGISTRY: dict[tuple[str, str], PIDCheckpoint] = {
         pid_scale=4,
     ),
 }
-# ZImage uses Flux1's 16-ch VAE for both ckpt types → alias to the flux entry.
-# Keep as an explicit alias (vs. duplicating) so updating "flux" updates "zimage" too.
+# ZImage and ZImage-Turbo use Flux1's 16-ch VAE for both ckpt types → alias to
+# the flux entries. Keep explicit aliases (vs. duplicating) so updating "flux"
+# updates these backbones too.
+PID_CHECKPOINT_REGISTRY[("zimage_turbo", "2k")] = PID_CHECKPOINT_REGISTRY[("flux", "2k")]
 PID_CHECKPOINT_REGISTRY[("zimage", "2kto4k")] = PID_CHECKPOINT_REGISTRY[("flux", "2kto4k")]
+PID_CHECKPOINT_REGISTRY[("zimage_turbo", "2kto4k")] = PID_CHECKPOINT_REGISTRY[("flux", "2kto4k")]
 
 
 def get_pid_checkpoint(backbone: str, ckpt_type: str = "2k") -> PIDCheckpoint:

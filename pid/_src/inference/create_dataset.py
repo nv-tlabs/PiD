@@ -140,7 +140,7 @@ def parse_args():
     p.add_argument(
         "--backbone",
         required=True,
-        choices=["flux", "sdxl", "sd3", "flux2", "qwenimage", "zimage", "rae", "scale_rae"],
+        choices=["flux", "sdxl", "sd3", "flux2", "qwenimage", "zimage", "zimage_turbo", "rae", "scale_rae"],
     )
     p.add_argument("--backbone_model_id", type=str, default=None, help="Override HF model ID")
 
