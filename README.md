@@ -12,7 +12,7 @@ model, unifying decoding and upsampling into a single generative module.
 It directly denoises in high-resolution pixel
 space and produces a super-resolved image in one pass.
 
-**[Paper](), [Project Page](https://research.nvidia.com/labs/sil/projects/pid/), [Model Weights](https://huggingface.co/nvidia/PiD)**
+**[Paper](https://arxiv.org/abs/2605.23902), [Project Page](https://research.nvidia.com/labs/sil/projects/pid/), [Model Weights](https://huggingface.co/nvidia/PiD)**
 
 [Yifan Lu](https://yifanlu0227.github.io/),
 [Qi Wu](https://wilsoncernwq.github.io/),
@@ -226,3 +226,15 @@ PiD codebase is licensed under the [Apache License 2.0](LICENSE).
 
 See [`CONTRIBUTING.md`](CONTRIBUTING.md) for development setup, code style,
 and the DCO sign-off requirement.
+
+
+## Citation
+
+```bibtex
+@article{lu2026pid,
+    title={PiD: Fast and High-Resolution Latent Decoding with Pixel Diffusion},
+    author={Lu, Yifan and Wu, Qi and Wu, Jay Zhangjie and Wang, Zian and Ling, Huan and Fidler, Sanja and Ren, Xuanchi},
+    journal={arXiv preprint arXiv:2605.23902},
+    year={2026}
+}
+```
