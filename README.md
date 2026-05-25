@@ -26,7 +26,7 @@ space and produces a super-resolved image in one pass.
 ## Installation
 
 > [!TIP]
-> **Quick Start** — if your environment already has PyTorch (with CUDA), `transformers==4.57.x`, and `diffusers>=0.37`, you don't need to build a new conda env. Just install the small set of utility deps the inference code pulls eagerly and you're ready to run the diffusers backbones (`flux`/`flux2`/`sd3`/`zimage`):
+> **Quick Start** — if your environment already has PyTorch (with CUDA), `transformers>=4.57.x`, and `diffusers>=0.37`, you don't need to build a new conda env. Just install the small set of utility deps the inference code pulls eagerly and you're ready to run the diffusers backbones (`flux`/`flux2`/`sd3`/`zimage`):
 >
 > ```bash
 > pip install hydra-core==1.3.2 omegaconf==2.3.0 \
