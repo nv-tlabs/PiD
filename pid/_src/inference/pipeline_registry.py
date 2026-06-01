@@ -4,16 +4,25 @@ Registry of diffusers pipelines for FPD-vs-VAE evaluation on generated images.
 Each DiffusionPipelineConfig describes how to load a diffusers pipeline, extract
 latents in (B, C, H, W) format, denormalize them, and decode with the pipeline's VAE.
 
-Supported backbones: flux, sdxl, sd3, flux2, qwenimage, zimage, zimage_turbo.
+Supported backbones: flux, sdxl, sd3, flux2, qwenimage, qwenimage_2512, zimage, zimage_turbo.
 
 Latent normalization conventions:
   - Flux/SDXL/SD3: simple affine scale+shift  →  raw = latent / scale + shift
   - Flux2: BatchNorm-based  →  raw = latent * bn_std + bn_mean
     (running stats stored in AutoencoderKLFlux2.latent_norm)
-  - QwenImage: per-channel mean/std  →  raw = latent * std + mean
+  - QwenImage / QwenImage-2512: per-channel mean/std  →  raw = latent * std + mean
     (vectors stored in pipeline.vae.config.latents_mean / latents_std)
   - ZImage/ZImage-Turbo: affine scale+shift read from pipeline.vae.config at runtime
     (vae_scale_factor=0 in registry signals runtime lookup)
+
+Inference-vs-training-frame conventions:
+  Flow-matching backbones (Flux/Flux2/SD3/QwenImage/ZImage) store intermediate latents
+  in the same flow-matching frame the PiD student was trained on — x_t = (1-σ) x_0 + σ ε,
+  σ ∈ [0, 1]. SDXL is the exception: its EulerDiscreteScheduler keeps latents in the
+  variance-exploding Euler frame x_t = x_0 + σ_eu ε with σ_eu ∈ [0, ~15]. `to_training_frame`
+  rescales SDXL captures to the variance-preserving form that the SDXL PiD student trained
+  with (x_vp = x_eu / sqrt(σ²+1), σ_vp = σ_eu / sqrt(σ²+1)); for every other backbone it is
+  a no-op.
 
 Diffusers `output_type="latent"` returns the denoised latent in the *normalized*
 space (same convention as tokenizer.encode()). For FPD the latent is used directly
@@ -124,6 +133,25 @@ PIPELINE_REGISTRY: dict[str, DiffusionPipelineConfig] = {
         spatial_compression=8,
         # QwenImage uses per-channel mean/std normalization, not affine scale/shift.
         # Actual denormalization reads pipeline.vae.config.latents_mean / latents_std.
+        vae_scale_factor=0.0,
+        vae_shift_factor=0.0,
+        uses_perchannel_normalization=True,
+        has_temporal_dim=True,
+        default_resolution=(1024, 1024),
+        default_num_inference_steps=50,
+        default_guidance_scale=4.0,
+        extra_generate_kwargs={"max_sequence_length": 512, "true_cfg_scale": 4.0, "negative_prompt": " "},
+    ),
+    # Dec 2025 refresh of Qwen-Image — same AutoencoderKLQwenImage and same
+    # QwenImagePipeline class; only the transformer / text-encoder checkpoint
+    # differs. The PiD student is identical, so checkpoint_registry aliases
+    # this backbone-tag to the qwenimage entry.
+    "qwenimage_2512": DiffusionPipelineConfig(
+        name="qwenimage_2512",
+        pipeline_class="diffusers.QwenImagePipeline",
+        default_model_id="Qwen/Qwen-Image-2512",
+        latent_channels=16,
+        spatial_compression=8,
         vae_scale_factor=0.0,
         vae_shift_factor=0.0,
         uses_perchannel_normalization=True,
@@ -262,6 +290,28 @@ def denormalize_latent(pipeline, latent: torch.Tensor, cfg: DiffusionPipelineCon
         return latent / scale + shift
 
 
+def to_training_frame(latent: torch.Tensor, sigma: float, cfg: DiffusionPipelineConfig) -> tuple[torch.Tensor, float]:
+    """Map an inference-loop intermediate latent + its scheduler σ to the frame the PiD
+    student was trained on.
+
+    Flow-matching backbones (Flux / Flux2 / SD3 / QwenImage / ZImage) already use the
+    σ ∈ [0, 1], x_t = (1-σ) x_0 + σ ε convention — identity for them.
+
+    SDXL is the exception. Its `EulerDiscreteScheduler` keeps latents in the variance-
+    exploding Euler frame x_t^eu = x_0 + σ_eu ε with σ_eu ∈ [0, ~15], but the SDXL PiD
+    student was trained with the VP/DDPM frame x_t^vp = sqrt(α̅_t) x_0 + sqrt(1-α̅_t) ε,
+    σ_vp ∈ [0, 1]. The two frames share the same noise realization differing only by a
+    scalar: x_t^vp = x_t^eu / sqrt(σ²+1), σ_vp = σ_eu / sqrt(σ²+1).
+    """
+    if cfg.name == "sdxl":
+        denom = float((sigma**2 + 1.0) ** 0.5)
+        if denom == 0.0:
+            # σ_eu == 0 → final clean latent; Euler and VP frames coincide.
+            return latent, 0.0
+        return latent / denom, sigma / denom
+    return latent, sigma
+
+
 def extract_latent(pipeline, raw_output, cfg: DiffusionPipelineConfig, height: int, width: int) -> torch.Tensor:
     """Normalize pipeline output_type="latent" to (B, C, H, W).
 
@@ -297,7 +347,7 @@ def extract_latent(pipeline, raw_output, cfg: DiffusionPipelineConfig, height: i
         result = Flux2Pipeline._unpack_latents_with_ids(latent, latent_ids)
         # _unpack_latents_with_ids returns a list/stacked tensor (B, C, H, W)
         latent = result if isinstance(result, torch.Tensor) else torch.stack(result, dim=0)
-    elif cfg.name == "qwenimage":
+    elif cfg.name in ("qwenimage", "qwenimage_2512"):
         # QwenImage: packed (B, seq_len, C) → (B, C, 1, H, W) with temporal dim
         from diffusers.pipelines.qwenimage.pipeline_qwenimage import QwenImagePipeline
 

@@ -11,16 +11,19 @@
 #                         2048→3840 + SD3-style dynamic shift). Designed for
 #                         1024 LDM → 4K (3840) decoding. Only registered for
 #                         the diffusers backbones (flux/flux2/sd3/zimage);
-#                         rae / scale_rae have no 2kto4k variant.
+#                         dinov2 / siglip have no 2kto4k variant.
 #
 # Backbone-tag namespace:
-#   flux       Flux1-dev (16-ch VAE)                     LDM + from_clean   (2k + 2kto4k)
-#   flux2      Flux2-dev (128-ch BN VAE)                 LDM + from_clean   (2k + 2kto4k)
-#   sd3        SD3 medium (16-ch VAE)                    LDM + from_clean   (2k + 2kto4k)
-#   zimage     ZImage (Flux1's 16-ch VAE)                LDM only — reuses Flux1 model (2k + 2kto4k)
-#   zimage_turbo  ZImage-Turbo (same 16-ch VAE)          LDM only — reuses Flux1 model (2k + 2kto4k)
-#   rae        DINOv2-B + RAE ViT-XL (768-ch RAE)        LDM + from_clean   (2k only, sr4x)
-#   scale_rae  SigLIP-2 So400M + Scale-RAE ViT-XL        LDM + from_clean   (2k only, sr8x)
+#   flux           Flux1-dev (16-ch VAE)                  LDM + from_clean   (2k + 2kto4k)
+#   flux2          Flux2-dev (128-ch BN VAE)              LDM + from_clean   (2k + 2kto4k)
+#   sd3            SD3 medium (16-ch VAE)                 LDM + from_clean   (2k + 2kto4k)
+#   sdxl           SDXL (4-ch VAE, VP-frame student)      LDM + from_clean   (2kto4k only)
+#   qwenimage      Qwen-Image (16-ch 3D VAE)              LDM + from_clean   (2kto4k only)
+#   qwenimage_2512 Qwen-Image-2512 (Dec 2025 refresh)     LDM only — aliases to qwenimage (2kto4k only)
+#   zimage         ZImage (Flux1's 16-ch VAE)             LDM only — reuses Flux1 model (2k + 2kto4k)
+#   zimage_turbo   ZImage-Turbo (same 16-ch VAE)          LDM only — reuses Flux1 model (2k + 2kto4k)
+#   dinov2         DINOv2-B + RAE ViT-XL (768-ch RAE)     LDM + from_clean   (2k only, sr4x)
+#   siglip         SigLIP-2 So400M + Scale-RAE ViT-XL     LDM + from_clean   (2k only, sr8x)
 #
 # `pid_scale` is the spatial upscaling factor baked into the PID network
 # (sr4x → 4, sr8x → 8) and is forwarded to the demo's --scale argument.
@@ -62,12 +65,12 @@ PID_CHECKPOINT_REGISTRY: dict[tuple[str, str], PIDCheckpoint] = {
         checkpoint_path=f"{_CKPT_ROOT}/PiD_res2k_sr4x_official_flux_distill_4step/model_ema_bf16.pth",
         pid_scale=4,
     ),
-    ("rae", "2k"): PIDCheckpoint(
+    ("dinov2", "2k"): PIDCheckpoint(
         experiment="PiD_res2k_sr4x_official_dinov2_distill_4step",
         checkpoint_path=f"{_CKPT_ROOT}/PiD_res2k_sr4x_official_dinov2_distill_4step/model_ema_bf16.pth",
         pid_scale=4,
     ),
-    ("scale_rae", "2k"): PIDCheckpoint(
+    ("siglip", "2k"): PIDCheckpoint(
         experiment="PiD_res2k_sr8x_official_siglip_distill_4step",
         checkpoint_path=f"{_CKPT_ROOT}/PiD_res2k_sr8x_official_siglip_distill_4step/model_ema_bf16.pth",
         pid_scale=8,
@@ -80,12 +83,22 @@ PID_CHECKPOINT_REGISTRY: dict[tuple[str, str], PIDCheckpoint] = {
     ),
     ("flux2", "2kto4k"): PIDCheckpoint(
         experiment="PiD_res2kto4k_sr4x_official_flux2_distill_4step",
-        checkpoint_path=f"{_CKPT_ROOT}/PiD_res2kto4k_sr4x_official_flux2_distill_4step/model_ema_bf16.pth",
+        checkpoint_path=f"{_CKPT_ROOT}/PiD_res2kto4k_sr4x_official_flux2_distill_4step_2606/model_ema_bf16.pth",
         pid_scale=4,
     ),
     ("sd3", "2kto4k"): PIDCheckpoint(
         experiment="PiD_res2kto4k_sr4x_official_sd3_distill_4step",
         checkpoint_path=f"{_CKPT_ROOT}/PiD_res2kto4k_sr4x_official_sd3_distill_4step/model_ema_bf16.pth",
+        pid_scale=4,
+    ),
+    ("sdxl", "2kto4k"): PIDCheckpoint(
+        experiment="PiD_res2kto4k_sr4x_official_sdxl_distill_4step",
+        checkpoint_path=f"{_CKPT_ROOT}/PiD_res2kto4k_sr4x_official_sdxl_distill_4step/model_ema_bf16.pth",
+        pid_scale=4,
+    ),
+    ("qwenimage", "2kto4k"): PIDCheckpoint(
+        experiment="PiD_res2kto4k_sr4x_official_qwenimage_distill_4step",
+        checkpoint_path=f"{_CKPT_ROOT}/PiD_res2kto4k_sr4x_official_qwenimage_distill_4step/model_ema_bf16.pth",
         pid_scale=4,
     ),
 }
@@ -95,6 +108,9 @@ PID_CHECKPOINT_REGISTRY: dict[tuple[str, str], PIDCheckpoint] = {
 PID_CHECKPOINT_REGISTRY[("zimage_turbo", "2k")] = PID_CHECKPOINT_REGISTRY[("flux", "2k")]
 PID_CHECKPOINT_REGISTRY[("zimage", "2kto4k")] = PID_CHECKPOINT_REGISTRY[("flux", "2kto4k")]
 PID_CHECKPOINT_REGISTRY[("zimage_turbo", "2kto4k")] = PID_CHECKPOINT_REGISTRY[("flux", "2kto4k")]
+# Qwen-Image-2512 (Dec 2025 refresh) shares the AutoencoderKLQwenImage and uses the
+# same PiD student as Qwen-Image — only the transformer/text-encoder differ.
+PID_CHECKPOINT_REGISTRY[("qwenimage_2512", "2kto4k")] = PID_CHECKPOINT_REGISTRY[("qwenimage", "2kto4k")]
 
 
 def get_pid_checkpoint(backbone: str, ckpt_type: str = "2k") -> PIDCheckpoint:
@@ -103,7 +119,7 @@ def get_pid_checkpoint(backbone: str, ckpt_type: str = "2k") -> PIDCheckpoint:
     `ckpt_type` defaults to `"2k"` so existing call sites keep their pre-2kto4k
     behavior. Raises KeyError with the list of valid keys when the pair is
     unknown — typical cause is asking for a `2kto4k` variant of a backbone
-    that doesn't ship one (rae / scale_rae).
+    that doesn't ship one (dinov2 / siglip).
     """
     if ckpt_type not in VALID_CKPT_TYPES:
         raise KeyError(f"Unknown ckpt_type {ckpt_type!r}. Valid: {VALID_CKPT_TYPES}")
