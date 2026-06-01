@@ -1,4 +1,4 @@
-# Scale-RAE T2I generation helpers for the from_ldm_siglip demo.
+# Scale-RAE T2I generation helpers for the from_ldm --backbone siglip demo.
 #
 # Loads the Scale-RAE Qwen 1.5B + DiT 2.4B latent-diffusion model
 # (`nyu-visionx/Scale-RAE-Qwen1.5B_DiT2.4B`) plus the SigLIP-2 ViT-XL
@@ -16,6 +16,7 @@
 
 import argparse
 import json
+import logging
 import os
 import sys
 from typing import Optional
@@ -24,6 +25,8 @@ import torch
 import torch.nn as nn
 
 from pid._src.tokenizers.scale_rae_decoder import GeneralDecoder
+
+logger = logging.getLogger(__name__)
 
 # Default location: ``$SCALE_RAE_REPO_PATH`` if set, else ``../Scale-RAE``
 # relative to CWD (the README convention is to clone Scale-RAE as a sibling
@@ -555,6 +558,178 @@ def add_scale_rae_args(p: argparse.ArgumentParser) -> None:
     )
 
 
+def run_scale_rae_demo(args):
+    """from_ldm demo flow for the Scale-RAE (SigLIP-2 + Qwen LM + DiT) text-conditional backbone.
+
+    Bypasses the diffusers pipeline: generates a 256px image per prompt, optionally
+    snapshots the diffusion trajectory at `--save_xt_steps` via a monkey-patched
+    p_sample_loop, decodes each snapshot (baseline), and runs the shared PiD decode/save
+    step. Invoked from from_ldm.py when --backbone is "siglip".
+    """
+    from pid._src.inference.cli_utils import maybe_init_distributed
+    from pid._src.inference.decoder import load_our_decoder, run_ours_and_save_step
+    from pid._src.inference.inference_utils import (
+        AsyncUploader,
+        build_tag,
+        get_rank_and_world_size,
+        load_prompts,
+    )
+
+    rank, world_size = get_rank_and_world_size()
+    maybe_init_distributed(world_size, rank)
+    is_rank0 = rank == 0
+
+    if args.resolution != 256:
+        raise ValueError(f"siglip backbone only supports --resolution 256, got {args.resolution}")
+    save_xt_set = sorted(set(args.save_xt_steps)) if args.save_xt_steps else []
+
+    prompts = load_prompts(args)
+    dtype = torch.bfloat16 if args.dtype == "bf16" else torch.float32
+
+    tag = build_tag(args, "siglip")
+    if is_rank0:
+        logger.info(
+            f"Backbone: siglip  resolution: 256  guidance: {args.scale_rae_guidance_level}  "
+            f"pid_steps: {args.pid_inference_steps}"
+        )
+        logger.info(f"Tag: {tag}")
+        logger.info(f"#Prompts: {len(prompts)}  save_xt_steps: {save_xt_set}  scale: {args.scale}")
+
+    experiment_opts = list(args.extra_experiment_opts) if args.extra_experiment_opts else []
+    if is_rank0 and experiment_opts:
+        logger.info(f"Extra experiment options: {experiment_opts}")
+
+    decoder_config_path, decoder_ckpt_path = _resolve_decoder_paths(
+        args.scale_rae_decoder_config,
+        args.scale_rae_decoder_ckpt,
+        args.scale_rae_repo_path,
+    )
+
+    # ---- Load Scale-RAE stack (warm-cache pattern across ranks) ----
+    if world_size > 1:
+        import torch.distributed as dist
+
+        tokenizer = sr_model = decoder = None
+        for r in range(world_size):
+            if rank == r:
+                msg = "from disk" if r == 0 else "from OS cache"
+                logger.info(f"[Rank {rank}] Loading Scale-RAE stack ({msg}) ...")
+                tokenizer, sr_model, decoder = load_scale_rae_stack(
+                    repo_path=args.scale_rae_repo_path,
+                    model_path=args.scale_rae_model_path,
+                    decoder_config_path=decoder_config_path,
+                    decoder_ckpt=decoder_ckpt_path,
+                    pretrained_encoder_path=args.scale_rae_pretrained_encoder,
+                    device="cuda",
+                    dtype=dtype,
+                )
+            dist.barrier()
+    else:
+        logger.info("Loading Scale-RAE stack ...")
+        tokenizer, sr_model, decoder = load_scale_rae_stack(
+            repo_path=args.scale_rae_repo_path,
+            model_path=args.scale_rae_model_path,
+            decoder_config_path=decoder_config_path,
+            decoder_ckpt=decoder_ckpt_path,
+            pretrained_encoder_path=args.scale_rae_pretrained_encoder,
+            device="cuda",
+            dtype=dtype,
+        )
+
+    capture_state = None
+    if save_xt_set:
+        _validate_diff_head_is_full_sequence(sr_model)
+        capture_state = _install_xt_capture(sr_model, save_xt_set)
+
+    model = load_our_decoder(args, experiment_opts, is_rank0)
+
+    output_dir = args.output_dir or "./results/official_demo/siglip"
+    os.makedirs(output_dir, exist_ok=True)
+    if is_rank0:
+        logger.info(f"Outputs -> {output_dir}")
+
+    uploader = AsyncUploader(max_workers=8) if args.upload else None
+
+    prompt_prefix = args.scale_rae_prompt_prefix or ""
+    if is_rank0 and prompt_prefix:
+        logger.info(f"Prepending {prompt_prefix!r} to every prompt before LM tokenization")
+
+    indexed_prompts = list(enumerate(prompts))
+    if world_size > 1:
+        indexed_prompts = indexed_prompts[rank::world_size]
+        logger.info(f"[Rank {rank}/{world_size}] Processing {len(indexed_prompts)} prompts")
+
+    for prompt_idx, prompt in indexed_prompts:
+        seed = args.seed + prompt_idx
+        sample_id = f"{prompt_idx:08d}"
+        # Scale-RAE's autoregressive LM uses torch.manual_seed for sampling determinism.
+        torch.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+
+        if capture_state is not None:
+            capture_state["captured"] = {}
+
+        lm_prompt = prompt_prefix + prompt if prompt_prefix else prompt
+        logger.info(f"[{prompt_idx}] Generating siglip (seed={seed}): {prompt[:80]!r}")
+
+        latent_2d, image_01 = generate_scale_rae_image(
+            prompt=lm_prompt,
+            tokenizer=tokenizer,
+            model=sr_model,
+            decoder=decoder,
+            guidance_level=args.scale_rae_guidance_level,
+            max_new_tokens=args.scale_rae_max_new_tokens,
+            final_pixel_size=256,
+        )
+        # latent_2d: (1152, 16, 16) bf16 cpu; image_01: (3, 256, 256) f32 cpu
+
+        # Build (label, latent_[1,1152,16,16], baseline_01_[1,3,256,256], sigma) per step.
+        steps: list[tuple[str, torch.Tensor, torch.Tensor, float]] = []
+        if capture_state is not None:
+            for K in save_xt_set:
+                if K not in capture_state["captured"]:
+                    raise RuntimeError(
+                        f"xt capture for step {K} did not fire — check that "
+                        f"model.diff_head.inference_flow.p_sample_loop is the entry point"
+                    )
+                xt_bchw, t_K = capture_state["captured"][K]
+                xt_bld = _postprocess_captured_xt(sr_model, xt_bchw)  # (1, 256, 1152)
+                grid = int(xt_bld.shape[1] ** 0.5)
+                xt_latent = (
+                    xt_bld[0].reshape(grid, grid, xt_bld.shape[2]).permute(2, 0, 1).contiguous().unsqueeze(0)
+                )  # (1, 1152, 16, 16)
+                xt_baseline = decode_xt_to_image(sr_model, decoder, xt_bld, final_pixel_size=256).unsqueeze(0)
+                steps.append((f"{K:02d}xt", xt_latent, xt_baseline, float(t_K)))
+
+        steps.append(("x0", latent_2d.unsqueeze(0), image_01.unsqueeze(0), 0.0))
+
+        for step_label, latent, baseline_01, sigma in steps:
+            run_ours_and_save_step(
+                model=model,
+                args=args,
+                tag=tag,
+                sample_id=sample_id,
+                prompt_idx=prompt_idx,
+                step_label=step_label,
+                latent=latent,
+                baseline_01=baseline_01,
+                sigma=sigma,
+                caption=prompt,  # original caption — not the LM-prefixed one
+                output_dir=output_dir,
+                uploader=uploader,
+                baseline_subdir="siglip_decode",
+                baseline_upload_tag_prefix="siglip_decode",
+            )
+
+    if uploader is not None:
+        if is_rank0:
+            logger.info("Waiting for background uploads to complete ...")
+        uploader.wait()
+
+    if is_rank0:
+        logger.info(f"Done! Results saved under {output_dir}")
+
+
 __all__ = [
     "DEFAULT_SCALE_RAE_REPO_PATH",
     "_install_xt_capture",
@@ -565,4 +740,5 @@ __all__ = [
     "decode_xt_to_image",
     "generate_scale_rae_image",
     "load_scale_rae_stack",
+    "run_scale_rae_demo",
 ]

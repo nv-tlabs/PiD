@@ -1,4 +1,4 @@
-# RAE (Representation Autoencoder) generation helpers for the from_ldm_dinov2 demo.
+# RAE (Representation Autoencoder) generation helpers for the from_ldm --backbone dinov2 demo.
 #
 # Loads the DINOv2-B encoder + ViT-XL decoder (stage-1 RAE) and the DiT^DH-XL
 # class-conditional ImageNet-512 diffusion model (stage-2) + DiT^DH-S guidance
@@ -13,12 +13,15 @@
 # falls back to that default.
 
 import argparse
+import logging
 import math
 import os
 import sys
 from typing import Optional
 
 import torch
+
+logger = logging.getLogger(__name__)
 
 # Default location: ``$RAE_REPO_PATH`` if set, else ``../RAE`` relative to CWD
 # (the README convention is to clone RAE as a sibling of the pid working tree).
@@ -282,7 +285,7 @@ def decode_rae_latent(rae, latent: torch.Tensor) -> torch.Tensor:
 
 
 # ---------------------------------------------------------------------------
-# CLI helpers — imported by _demo_common.py's parser when backbone=="rae".
+# CLI helpers — imported by cli_utils.py's parser when backbone=="rae".
 # ---------------------------------------------------------------------------
 
 
@@ -380,6 +383,155 @@ def resolve_rae_dit_ckpts(args) -> tuple[str, str]:
     return main_ckpt, guid_ckpt
 
 
+def run_rae_demo(args):
+    """from_ldm demo flow for the RAE (DINOv2 + ViT-XL) class-conditional backbone.
+
+    Bypasses the diffusers pipeline: samples the full RAE ODE trajectory, slices the
+    requested `--save_xt_steps` snapshots plus the final clean x0, decodes each with the
+    RAE decoder (baseline), and runs the shared PiD decode/save step. Invoked from
+    from_ldm.py when --backbone is "dinov2".
+    """
+    from pid._src.inference.cli_utils import maybe_init_distributed
+    from pid._src.inference.decoder import load_our_decoder, run_ours_and_save_step
+    from pid._src.inference.inference_utils import AsyncUploader, build_tag, get_rank_and_world_size
+
+    rank, world_size = get_rank_and_world_size()
+    maybe_init_distributed(world_size, rank)
+    is_rank0 = rank == 0
+
+    if args.resolution != 512:
+        raise ValueError(f"dinov2 backbone only supports --resolution 512, got {args.resolution}")
+    num_inference_steps = args.num_inference_steps
+    save_xt_set = sorted(set(args.save_xt_steps)) if args.save_xt_steps else []
+    for k in save_xt_set:
+        if k < 1 or k > num_inference_steps:
+            raise ValueError(f"--save_xt_steps value {k} out of range [1, {num_inference_steps}]")
+
+    class_ids = resolve_rae_class_ids(args)
+    rae_dit_main_ckpt, rae_dit_guid_ckpt = resolve_rae_dit_ckpts(args)
+    class_names_path = os.path.join(os.path.dirname(__file__), "prompts", "imagenet_classes.txt")
+    class_names = load_class_names(class_names_path)
+
+    dtype = torch.bfloat16 if args.dtype == "bf16" else torch.float32
+
+    tag = build_tag(args, "dinov2")
+    if is_rank0:
+        logger.info(
+            f"Backbone: dinov2  resolution: 512  num_inference_steps: {num_inference_steps}  "
+            f"rae_cfg_scale: {args.rae_cfg_scale}  pid_steps: {args.pid_inference_steps}"
+        )
+        logger.info(f"Tag: {tag}")
+        logger.info(f"#Classes: {len(class_ids)}  save_xt_steps: {save_xt_set}  scale: {args.scale}")
+
+    experiment_opts = list(args.extra_experiment_opts) if args.extra_experiment_opts else []
+    if is_rank0 and experiment_opts:
+        logger.info(f"Extra experiment options: {experiment_opts}")
+
+    # ---- Load RAE stack (warm-cache pattern across ranks) ----
+    if world_size > 1:
+        import torch.distributed as dist
+
+        rae = dit_main = dit_guid = sample_fn = t_schedule = None
+        for r in range(world_size):
+            if rank == r:
+                msg = "from disk" if r == 0 else "from OS cache"
+                logger.info(f"[Rank {rank}] Loading RAE stack ({msg}) ...")
+                rae, dit_main, dit_guid, sample_fn, t_schedule = load_rae_stack(
+                    repo_path=args.rae_repo_path,
+                    decoder_ckpt=args.rae_decoder_ckpt,
+                    stats_path=args.rae_stats_path,
+                    dit_main_ckpt=rae_dit_main_ckpt,
+                    dit_guid_ckpt=rae_dit_guid_ckpt,
+                    num_inference_steps=num_inference_steps,
+                    device="cuda",
+                    dtype=dtype,
+                )
+            dist.barrier()
+    else:
+        logger.info("Loading RAE stack ...")
+        rae, dit_main, dit_guid, sample_fn, t_schedule = load_rae_stack(
+            repo_path=args.rae_repo_path,
+            decoder_ckpt=args.rae_decoder_ckpt,
+            stats_path=args.rae_stats_path,
+            dit_main_ckpt=rae_dit_main_ckpt,
+            dit_guid_ckpt=rae_dit_guid_ckpt,
+            num_inference_steps=num_inference_steps,
+            device="cuda",
+            dtype=dtype,
+        )
+
+    if is_rank0:
+        logger.info(f"t_schedule range: {t_schedule[0].item():.4f} (noise) -> {t_schedule[-1].item():.4f} (clean)")
+
+    model = load_our_decoder(args, experiment_opts, is_rank0)
+
+    output_dir = args.output_dir or "./results/official_demo/dinov2"
+    os.makedirs(output_dir, exist_ok=True)
+    if is_rank0:
+        logger.info(f"Outputs -> {output_dir}")
+
+    uploader = AsyncUploader(max_workers=8) if args.upload else None
+
+    indexed_classes = list(enumerate(class_ids))
+    if world_size > 1:
+        indexed_classes = indexed_classes[rank::world_size]
+        logger.info(f"[Rank {rank}/{world_size}] Processing {len(indexed_classes)} classes")
+
+    for prompt_idx, cid in indexed_classes:
+        seed = args.seed + prompt_idx
+        sample_id = f"{prompt_idx:08d}"
+        gen = torch.Generator(device="cuda").manual_seed(seed)
+        caption = class_names[cid]
+
+        logger.info(f"[{prompt_idx}] Sampling RAE trajectory (seed={seed}, class={cid}: {caption!r})")
+        traj = sample_rae_trajectory(
+            class_id=cid,
+            dit_main=dit_main,
+            dit_guid=dit_guid,
+            sample_fn=sample_fn,
+            device="cuda",
+            dtype=dtype,
+            cfg_scale=args.rae_cfg_scale,
+            cfg_interval=args.rae_cfg_interval,
+            generator=gen,
+        )  # (num_inference_steps+1, 768, 32, 32)
+
+        # Yield (label, latent_[1,768,32,32], sigma) for each xt step + final x0.
+        steps: list[tuple[str, torch.Tensor, float]] = []
+        for K in save_xt_set:
+            steps.append((f"{K:02d}xt", traj[K : K + 1], float(t_schedule[K].item())))
+        steps.append(("x0", traj[-1:], 0.0))
+
+        for step_label, latent, sigma in steps:
+            with torch.no_grad():
+                baseline_01 = decode_rae_latent(rae, latent)  # (1, 3, 512, 512) in [0, 1]
+
+            run_ours_and_save_step(
+                model=model,
+                args=args,
+                tag=tag,
+                sample_id=sample_id,
+                prompt_idx=prompt_idx,
+                step_label=step_label,
+                latent=latent,
+                baseline_01=baseline_01,
+                sigma=sigma,
+                caption=caption,
+                output_dir=output_dir,
+                uploader=uploader,
+                baseline_subdir="dinov2_decode",
+                baseline_upload_tag_prefix="dinov2_decode",
+            )
+
+    if uploader is not None:
+        if is_rank0:
+            logger.info("Waiting for background uploads to complete ...")
+        uploader.wait()
+
+    if is_rank0:
+        logger.info(f"Done! Results saved under {output_dir}")
+
+
 __all__ = [
     "DEFAULT_RAE_REPO_PATH",
     "add_rae_args",
@@ -389,5 +541,6 @@ __all__ = [
     "load_rae_stack",
     "resolve_rae_class_ids",
     "resolve_rae_dit_ckpts",
+    "run_rae_demo",
     "sample_rae_trajectory",
 ]

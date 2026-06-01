@@ -59,22 +59,18 @@ DIFFUSERS_PIPELINES = [
     "ZImagePipeline",
 ]
 
+# The two unified demo dispatchers + the dataset generator. Each backbone is selected
+# at runtime via --backbone (see from_ldm.py / from_clean.py).
 REQUIRED_INFERENCE_MODULES = [
-    "pid._src.inference.from_clean_flux",
-    "pid._src.inference.from_clean_flux2",
-    "pid._src.inference.from_clean_sd3",
-    "pid._src.inference.from_ldm_flux",
-    "pid._src.inference.from_ldm_flux2",
-    "pid._src.inference.from_ldm_sd3",
-    "pid._src.inference.from_ldm_zimage",
-    "pid._src.inference.from_ldm_zimage_turbo",
-    "pid._src.inference.from_clean_dinov2",
-    "pid._src.inference.from_clean_siglip",
+    "pid._src.inference.from_ldm",
+    "pid._src.inference.from_clean",
 ]
 
+# Non-diffusers backends. They import cleanly without the upstream RAE / Scale-RAE
+# repos (those are imported lazily inside the load/sample helpers).
 OPTIONAL_INFERENCE_MODULES = [
-    "pid._src.inference.from_ldm_dinov2",
-    "pid._src.inference.from_ldm_siglip",
+    "pid._src.inference.rae_generation",
+    "pid._src.inference.scale_rae_generation",
 ]
 
 
