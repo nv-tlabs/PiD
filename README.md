@@ -24,10 +24,11 @@ space and produces a super-resolved image in one pass.
 [Xuanchi Ren](https://xuanchiren.com/) <br>
 
 ## News
-- 🚀 [May 25, 2026] Paper, code, and model weights released, with PiD options for **FLUX**, **FLUX.2**, **Z-Image**, **Z-Image-Turbo**, **SD3**, **DINOv2**, and **SigLIP**.
+- 🔥 [June 1, 2026] PiD checkpoints for **SDXL**, **Qwen-Image** and **Qwen-Image-2512** are released. Check [HuggingFace](https://huggingface.co/nvidia/PiD).
+- 🔥 [June 1, 2026] A new checkpoint for **FLUX.2 (2kto4k)** (with `_2606` suffix) that has no color drifting issue is released. See [here](docs/FLUX2_2kto4k_new_ckpt_compare.md) for comparison with the old one.
+- 🔥 [June 1, 2026] We clean up the codebase and remove useless code.
 - 🚀 [May 27, 2026] PiD is now in [ComfyUI](https://github.com/Comfy-Org/ComfyUI/pull/14103)!
-- 🔜 [Coming Soon] An updated checkpoint for **FLUX.2 (2kto4k)** that has no color drifting issue.
-- 🔜 [Coming Soon] PiD checkpoint for **Qwen-Image** and **SD-XL**.
+- 🚀 [May 25, 2026] Paper, code, and model weights released, with PiD options for **FLUX**, **FLUX.2**, **Z-Image**, **Z-Image-Turbo**, **SD3**, **DINOv2**, and **SigLIP**.
 - 🔜 [Coming Soon] PiD undistilled checkpoints.
 - ⏳ [Planned] Training scripts.
 
@@ -60,7 +61,7 @@ pip install -e .
 
 Pretrained PiD checkpoints live under `checkpoints/`. Each diffusers backbone ships
 two variants — the original `2k` decoder (trained at 2048px) and a `2kto4k` decoder
-(trained with multi-resolution data bucketing 2048→3840 + an SD3-style dynamic
+(trained with multi-resolution data bucketing from 2048 to 4096 + an SD3-style dynamic
 shift, intended for 1024 LDM → 4K decoding). Pick the variant at the CLI via
 `--pid_ckpt_type {2k,2kto4k}` (default: `2k`).
 
@@ -76,43 +77,53 @@ hf download nvidia/PiD --local-dir . --include "checkpoints/*"
 
 ## Running inference
 
-PiD ships two complementary entry points per backbone:
+PiD ships two complementary entry points, each selecting a backbone with `--backbone`:
 
-| Backbone | `from_clean_*` (image → encode → PiD) | `from_ldm_*` (text/class → LDM → PiD) |
-|----------|---------------------------------------|---------------------------------------|
-| flux     | `from_clean_flux.py`    | `from_ldm_flux.py`    |
-| flux2    | `from_clean_flux2.py`   | `from_ldm_flux2.py`   |
-| sd3      | `from_clean_sd3.py`     | `from_ldm_sd3.py`     |
-| zimage   | reuses `flux`           | `from_ldm_zimage.py`  |
-| zimage_turbo | reuses `flux`       | `from_ldm_zimage_turbo.py` |
-| dinov2   | `from_clean_dinov2.py`  | `from_ldm_dinov2.py`  |
-| siglip   | `from_clean_siglip.py`  | `from_ldm_siglip.py`  |
+- `from_ldm.py`  — text/class → latent diffusion → PiD decode
+- `from_clean.py` — image → VAE encode → PiD decode
 
-All scripts live under `pid/_src/inference/` and decode each captured latent
-twice — once with the backbone's native VAE (baseline) and once with PiD.
+Both entry points live under `pid/_src/inference/` and decode each captured latent
+twice — once with the backbone's native VAE/RAE decoder (baseline) and once with PiD.
+The `dinov2` and `siglip` backbones are the upstream RAE (DINOv2 encoder) and Scale-RAE
+(SigLIP-2 encoder) models.
 
 > [!IMPORTANT]
 > Picking the checkpoint variant — `--pid_ckpt_type`
 > Every entry point accepts `--pid_ckpt_type {2k,2kto4k}` (default `2k`):
 >
-> - **`2k`** — the original 2048px-trained decoder.
-> - **`2kto4k`** — the up-to-4K-resolution decoder. Available for `flux` / `flux2` / `sd3` / `zimage` / `zimage_turbo` only. Worse than `2k` at 2048px resolution.
+> - **`2k`** — the original 2048px-trained decoder, trained with 2K resolution only. Multiple aspect ratios are supported, typically 2048 × 2048 (1:1), 2304 × 1728 (4:3), 1728 × 2304 (3:4), 2688 × 1536 (16:9), and 1536 × 2688 (9:16).
+> - **`2kto4k`** — the up-to-4K-resolution decoder, trained with varying resolution (from 2K to 4K). Multiple aspect ratios are supported. Worse than `2k` at 2048px resolution.
 >
 > For the exact checkpoint path for each backbone, see [docs/checkpoints.md](docs/checkpoints.md).
-> A quick sanity check that the right variant loaded: when `2kto4k` is active you
-should see `PixelDiT dynamic shift: base_shift=4.0 base_image_size=1024` in the
-init log; for `2k` that line is absent. Both `2k` and `2kto4k` support non-square aspect ratios.
 
-### 📕 `from_ldm_*`: text / class → latent diffusion → PiD decode
 
-Runs the corresponding latent-diffusion backbone on a prompt (or class id for
-the class-conditional `dinov2` backbone), captures the intermediate `x_t` at
-user-specified denoising steps (early LDM termination) and the final clean `x_0`, then decodes
-each captured latent with both the native VAE / RAE decoder (baseline) and PiD.
+| `--backbone`   | Currently available `--pid_ckpt_type` |
+|----------------|:-------------------------------------:|
+| flux           | `2k`, `2kto4k` |
+| flux2          | `2k`, `2kto4k` |
+| sd3            | `2k`, `2kto4k` |
+| zimage         | `2k`, `2kto4k` |
+| zimage_turbo   | `2k`, `2kto4k` |
+| sdxl           | `2kto4k` |
+| qwenimage      | `2kto4k` |
+| qwenimage_2512 | `2kto4k` |
+| dinov2 (RAE)   | `2k` |
+| siglip (Scale-RAE) | `2k` |
 
-For `flux` / `flux2` / `sd3` / `zimage` / `zimage_turbo` the LDM is a HuggingFace `diffusers`
-pipeline (`FluxPipeline`, `Flux2Pipeline`, `StableDiffusion3Pipeline`,
-`ZImagePipeline`).
+For the exact checkpoint path behind each `(backbone, --pid_ckpt_type)`, see [docs/checkpoints.md](docs/checkpoints.md).
+
+### 📕 `from_ldm`: text / class → latent diffusion → PiD decode
+
+Runs the chosen `--backbone` on a prompt (or class id for the class-conditional `dinov2`
+backbone), captures the intermediate `x_t` at user-specified denoising steps (early LDM
+termination) and the final clean `x_0`, then decodes each captured latent with both the
+native VAE / RAE decoder (baseline) and PiD.
+
+For `flux` / `flux2` / `sd3` / `sdxl` / `qwenimage` / `qwenimage_2512` / `zimage` /
+`zimage_turbo` the LDM is a HuggingFace `diffusers` pipeline (`FluxPipeline`,
+`Flux2Pipeline`, `StableDiffusion3Pipeline`, `StableDiffusionXLPipeline`,
+`QwenImagePipeline`, `ZImagePipeline`). `qwenimage_2512` is the Dec-2025 Qwen-Image
+refresh (same VAE + PiD student as `qwenimage`, different transformer).
 
 For `dinov2` and `siglip` the LDM is the upstream
 [RAE](https://github.com/bytetriper/RAE) (class-conditional ImageNet-512) or
@@ -122,25 +133,25 @@ For `dinov2` and `siglip` the LDM is the upstream
 #### Example 1 — Single-GPU, single prompt (Flux, default `2k` decoder)
 
 ```bash
-PYTHONPATH=. python -m pid._src.inference.from_ldm_flux \
+PYTHONPATH=. python -m pid._src.inference.from_ldm --backbone flux \
     --prompt "A photorealistic half-body portrait of a brown tabby cat with bold stripes sitting attentively on a rustic wooden kitchen table, soft morning light streaming sideways through a large window, fine fur detail and stripe patterns sharply visible, intense amber-green eyes in razor-sharp focus, warm farmhouse kitchen softly out of focus, cinematic shallow depth of field, ultra-detailed fur texture, photorealistic" \
     --ldm_inference_steps 28 --save_xt_steps 24 \
     --output_dir ./results/official_demo/flux \
-    --cfg_scale 1 --pid_inference_steps 4 --scale 4
+    --pid_inference_steps 4
 ```
 
-#### Example 2 — Single-GPU, 4K decode (Flux, `2kto4k` decoder)
+#### Example 2 — Single-GPU, 4K decode with 4:3 aspect ratio (Flux, `2kto4k` decoder)
 
-Same backbone as Example 1 but with `--resolution 1024 --pid_ckpt_type 2kto4k`,
-so the LDM produces a 1024² latent and PiD decodes it to 4K.
+Same backbone as Example 1 but with `--resolution 4096,3072 --pid_ckpt_type 2kto4k`.
+`--resolution` is the final output size, so the LDM runs at `1024,768` and
+PiD decodes it to 4K.
 
 ```bash
-PYTHONPATH=. python -m pid._src.inference.from_ldm_flux \
-    --prompt "A photorealistic half-body portrait of a brown tabby cat with bold stripes sitting attentively on a rustic wooden kitchen table, soft morning light streaming sideways through a large window, fine fur detail and stripe patterns sharply visible, intense amber-green eyes in razor-sharp focus, warm farmhouse kitchen softly out of focus, cinematic shallow depth of field, ultra-detailed fur texture, photorealistic" \
-    --resolution 1024 --pid_ckpt_type 2kto4k \
-    --ldm_inference_steps 28 --save_xt_steps 24 \
-    --output_dir ./results/official_demo/flux_4k \
-    --cfg_scale 1 --pid_inference_steps 4 --scale 4
+PYTHONPATH=. python -m pid._src.inference.from_ldm --backbone flux \
+    --prompt "A close photograph of a cat looking through frosted glass beside a small pine branch, winter light, soft condensation, simple cozy composition, expressive eyes." \
+    --resolution 4096,3072 --pid_ckpt_type 2kto4k \
+    --ldm_inference_steps 28 --save_xt_steps 24 26 \
+    --output_dir ./results/official_demo/flux_4k_ar4_3
 ```
 
 #### Example 3 — Multi-GPU with a prompt file (Z-Image)
@@ -150,27 +161,25 @@ PYTHONPATH=. python -m pid._src.inference.from_ldm_flux \
 
 ```bash
 PYTHONPATH=. torchrun --nproc_per_node=4 \
-    -m pid._src.inference.from_ldm_zimage \
+    -m pid._src.inference.from_ldm --backbone zimage \
     --prompt_file pid/_src/inference/prompts/prompt_creative.txt \
     --ldm_inference_steps 50 --save_xt_steps 46 \
-    --output_dir ./results/official_demo/zimage \
-    --cfg_scale 1 --pid_inference_steps 4 --scale 4
+    --output_dir ./results/official_demo/zimage
 ```
 
-#### Example 4 — Multi-GPU, 1K to 4K decode (Z-Image-Turbo, `2kto4k` decoder)
+#### Example 4 — Multi-GPU, 1K → 4K decode (Z-Image-Turbo, `2kto4k` decoder)
 
 Z-Image-Turbo defaults to 9 diffusers steps with `guidance_scale=0.0`. The final
 clean latent `x0` is always saved and is the recommended Turbo output to inspect.
 `--save_xt_steps 7` is optional; it saves an additional near-final `x_t` sample
-for comparison.
+for comparison. `--resolution 4096` means `H=4096, W=4096` and the LDM runs at `1024,1024`.
 
 ```bash
-PYTHONPATH=. torchrun --nproc_per_node=8 \
-    -m pid._src.inference.from_ldm_zimage_turbo \
+PYTHONPATH=. torchrun --nproc_per_node=4 \
+    -m pid._src.inference.from_ldm --backbone zimage_turbo \
     --prompt_file pid/_src/inference/prompts/prompt_zimage_turbo.txt \
-    --resolution 1024 --pid_ckpt_type 2kto4k \
-    --output_dir ./results/official_demo/zimage_turbo_4k \
-    --cfg_scale 1 --pid_inference_steps 4 --scale 4
+    --resolution 4096 --pid_ckpt_type 2kto4k \
+    --output_dir ./results/official_demo/zimage_turbo_4k
 ```
 
 #### `dinov2` / `siglip` backbones
@@ -187,23 +196,26 @@ examples.
 |----------|-------------------------|---------------|----------------------------|--------------------|
 | flux     | `--ldm_inference_steps` | 28            | `22 24 26`                 | step `24`          |
 | sd3      | `--ldm_inference_steps` | 28            | `22 24 26`                 | step `24`          |
+| sdxl     | `--ldm_inference_steps` | 30            | `24 26 28`                 | step `26`          |
 | flux2    | `--ldm_inference_steps` | 50            | `44 46 48`                 | step `46`          |
+| qwenimage | `--ldm_inference_steps` | 50 | `44 46 48`             | step `46`          |
+| qwenimage_2512 | `--ldm_inference_steps` | 50 | `44 46 48`             | step `46`          |
 | zimage   | `--ldm_inference_steps` | 50            | `44 46 48`                 | step `46`          |
 | zimage_turbo | `--ldm_inference_steps` | 9         | `7`                        | `x0`               |
 
 ---
-### 📗 `from_clean_*`: image → VAE encode → PiD decode
+### 📗 `from_clean`: image → VAE encode → PiD decode
 
-No latent diffusion model is run. The input image is encode by VAE,
-optionally corrupted with Gaussian noise at each
-sigma in `--degrade_sigmas`, then decoded by PiD at `--scale * input_resolution`.
+No latent diffusion model is run. The input image is fed at its native resolution
+(only center-cropped so each side is a multiple of 16), encoded by VAE, optionally
+corrupted with Gaussian noise at each sigma in `--degrade_sigmas`, then decoded by PiD
+at `--scale * vae_native_resolution`.
 
 Single-GPU example (Flux):
 
 ```bash
-PYTHONPATH=. python -m pid._src.inference.from_clean_flux \
+PYTHONPATH=. python -m pid._src.inference.from_clean --backbone flux \
     --manifest assets/clean_image_manifest.jsonl \
-    --input_resolution 512 \
     --degrade_sigmas 0.0 \
     --output_dir ./results/official_demo_from_clean/flux \
     --cfg_scale 1 --pid_inference_steps 4 --scale 4
@@ -211,11 +223,14 @@ PYTHONPATH=. python -m pid._src.inference.from_clean_flux \
 
 You can pass a single image with `--input_path` and a prompt with `--prompt`
 instead of `--manifest`, and a sigma sweep such as `--degrade_sigmas 0.0 0.2 0.4 0.8`
-to decode noise-corrupted latents.
+to decode noise-corrupted latents. Swap `--backbone` to use a different VAE
+(`flux2` / `sd3` / `sdxl` / `qwenimage`); `sdxl` automatically uses its
+variance-preserving noising form.
 
-The `dinov2` / `siglip` `from_clean_*` flows take the same flags but with
-different default resolutions and scales —
-see [`docs/dinov2_siglip.md`](docs/dinov2_siglip.md).
+The `dinov2` / `siglip` `from_clean` flows take the same flags but with a different
+`--scale` (8 for `siglip`); their encoders resize internally to their fixed native
+interface (512 / 256) regardless of the input image size — see
+[`docs/dinov2_siglip.md`](docs/dinov2_siglip.md).
 
 ### Common arguments
 
@@ -234,15 +249,17 @@ of the prompts / manifest entries and writes to `--output_dir` independently.
 
 ```
 pid/_src/inference/
-├── from_ldm_{flux,flux2,sd3,zimage,zimage_turbo,dinov2,siglip}.py  # text/class → LDM → PiD decode
-├── from_clean_{flux,flux2,sd3,dinov2,siglip}.py       # image → encode → PiD decode
-├── _demo_common.py                                    # shared CLI + run loop for from_ldm_*
-├── _demo_from_clean_common.py                         # shared CLI + run loop for from_clean_*
-├── checkpoint_registry.py                             # backbone → PiD checkpoint mapping
-├── pipeline_registry.py                               # diffusers backbone → HF pipeline mapping
-├── rae_generation.py                                  # DINOv2-RAE LDM helpers (from_ldm_dinov2)
-├── scale_rae_generation.py                            # Scale-RAE LDM helpers (from_ldm_siglip)
-└── prompts/                                           # prompt files for from_ldm_*
+├── from_ldm.py            # entrypoint: text/class → LDM → PiD decode (--backbone …)
+├── from_clean.py          # entrypoint: image → VAE encode → PiD decode (--backbone …)
+├── cli_utils.py           # argument parsers + backbone aliases for both entrypoints
+├── decoder.py             # shared PiD decode/save core (+ from_clean VAE round-trip & noising)
+├── step_capture.py        # diffusers callbacks: XtCaptureCallback / X0CaptureCallback
+├── inference_utils.py     # image/prompt/manifest IO, save_image, tags, AsyncUploader, S3 helpers
+├── checkpoint_registry.py # backbone → PiD checkpoint mapping
+├── pipeline_registry.py   # diffusers backbone → HF pipeline mapping
+├── rae_generation.py      # DINOv2-RAE backend + run_rae_demo (--backbone dinov2)
+├── scale_rae_generation.py# Scale-RAE backend + run_scale_rae_demo (--backbone siglip)
+└── prompts/               # prompt files
 ```
 
 ## License

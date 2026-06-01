@@ -1,20 +1,22 @@
 # DINOv2 / SigLIP-2 from Clean Image
-The `dinov2` and `siglip` `from_clean_*` flows accept the same flags as the
-diffusers backbones (see the main README) but with different
-`--input_resolution` and `--scale` defaults to match each tokenizer's native
-interface:
+The `from_clean --backbone dinov2` and `--backbone siglip` flows accept the same flags as
+the diffusers backbones (see the main README). The input image is fed at its native
+resolution (only center-cropped to a 16-multiple); each encoder then resizes internally to
+its own fixed native interface, so only `--scale` needs to match. The `dinov2` backbone is
+the upstream **RAE** (DINOv2 encoder); the `siglip` backbone is the upstream **Scale-RAE**
+(SigLIP-2 encoder):
 
-- `dinov2` → `--input_resolution 512 --scale 4` (512 → 2048)
-- `siglip` → `--input_resolution 256 --scale 8` (256 → 2048)
+- `dinov2` (RAE)       → `--scale 4` (native 512 → 2048)
+- `siglip` (Scale-RAE) → `--scale 8` (native 256 → 2048)
 
 
 # DINOv2 RAE / SigLIP-2 from Latent Diffusion Model
 
-The `dinov2` and `siglip` entry points (`from_ldm_dinov2`, `from_ldm_siglip`) wrap two
-latent-diffusion models that are **not** distributed through `diffusers` —
-the upstream class-conditional ImageNet-512 [RAE](https://github.com/bytetriper/RAE)
-and the text-conditional 256px [Scale-RAE](https://github.com/ZitengWangNYU/Scale-RAE).
-`from_ldm_*` additionally needs the upstream LDM repos on `sys.path`.
+`from_ldm --backbone dinov2` and `--backbone siglip` wrap two latent-diffusion models that
+are **not** distributed through `diffusers` — the `dinov2` backbone is the upstream
+class-conditional ImageNet-512 [RAE](https://github.com/bytetriper/RAE) and the `siglip`
+backbone is the text-conditional 256px [Scale-RAE](https://github.com/ZitengWangNYU/Scale-RAE).
+These backbones additionally need the upstream LDM repos on `sys.path`.
 
 > [!NOTE]
 > LDM in vision encoder space is hard to train. When the latent itself is
@@ -52,8 +54,8 @@ cd pid
 #    versions of peft / torchtext / accelerate / transformers / tokenizers
 #    that we deliberately ignore via `--no-deps` above. The PiD inference
 #    code only exercises the parts of Scale-RAE that work with the newer
-#    versions; from_ldm_siglip / from_clean_siglip have been verified
-#    end-to-end against the versions installed below.
+#    versions; the siglip (Scale-RAE) from_ldm / from_clean flows have been
+#    verified end-to-end against the versions installed below.
 pip install --no-deps -e ../Scale-RAE
 pip install torchdiffeq timm omegaconf ezcolorlog shortuuid open_clip_torch accelerate
 pip install "transformers==4.57.1"
@@ -69,35 +71,35 @@ hf download nyu-visionx/RAE-collections \
     --local-dir models
 ```
 
-## `from_ldm_*`: class / text → upstream LDM → PiD decode
+## `from_ldm`: class / text → upstream LDM → PiD decode
 
 Class-conditional example (DINOv2-RAE, ImageNet-512):
 
 ```bash
 export RAE_REPO_PATH=$(realpath ../RAE)
-PYTHONPATH=. python -m pid._src.inference.from_ldm_dinov2 \
+PYTHONPATH=. python -m pid._src.inference.from_ldm --backbone dinov2 \
     --load_ema_to_reg \
     --rae_class_ids 207 281 387 \
     --num_inference_steps 50 --save_xt_steps 44 46 48 \
     --output_dir ./results/official_demo/dinov2 \
-    --cfg_scale 1 --pid_inference_steps 4 --scale 4
+    --pid_inference_steps 4 --scale 4
 ```
 
 Text-conditional example (Scale-RAE, 256 → 2048 at 8×):
 
 ```bash
 export SCALE_RAE_REPO_PATH=$(realpath ../Scale-RAE)
-PYTHONPATH=. python -m pid._src.inference.from_ldm_siglip \
+PYTHONPATH=. python -m pid._src.inference.from_ldm --backbone siglip \
     --load_ema_to_reg \
     --prompt "A cat sitting on a windowsill at sunset" \
     --save_xt_steps 44 46 48 \
     --output_dir ./results/official_demo/siglip \
-    --cfg_scale 1 --pid_inference_steps 4 --scale 8
+    --pid_inference_steps 4 --scale 8
 ```
 
-Suggested step counts (see each script's docstring for the exact recipe):
+Suggested step counts (see each entrypoint's docstring for the exact recipe):
 
-| Backbone | LDM steps flag          | Default steps | `--save_xt_steps` (example) |
-|----------|-------------------------|---------------|-----------------------------|
-| dinov2   | `--num_inference_steps` | 50            | `44 46 48`                  |
-| siglip   | (no flag; LM-driven)    | —             | `44 46 48`                  |
+| `--backbone` | LDM steps flag          | Default steps | `--save_xt_steps` (example) |
+|--------------|-------------------------|---------------|-----------------------------|
+| dinov2 (RAE) | `--num_inference_steps` | 50            | `44 46 48`                  |
+| siglip (Scale-RAE) | (no flag; LM-driven) | —          | `44 46 48`                  |
