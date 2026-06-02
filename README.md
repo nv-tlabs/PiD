@@ -106,12 +106,8 @@ Runs the chosen `--backbone` on a prompt, captures the intermediate `x_t` at use
 termination) and the final clean `x_0`, then decodes each captured latent with both the
 native VAE / RAE decoder (baseline) and PiD.
 
-For `dinov2` and `siglip` the LDM is the upstream
-[RAE](https://github.com/bytetriper/RAE) (class-conditional ImageNet-512) or
-[Scale-RAE](https://github.com/ZitengWangNYU/Scale-RAE) (text-conditional
-256px) repo — see the optional-deps section below for installation.
-
 #### Example 1 — Single-GPU, single prompt (Flux, default `2k` decoder)
+Generating a 2048px image with Flux + PiD decode. Decoding latent from 24 and 28 (full) LDM steps.
 
 ```bash
 PYTHONPATH=. python -m pid._src.inference.from_ldm --backbone flux \
@@ -138,8 +134,8 @@ PYTHONPATH=. python -m pid._src.inference.from_ldm --backbone flux \
 #### Example 3 — Multi-GPU with a prompt file (Z-Image) with torch.compile
 
 `torchrun` shards `--prompt_file` across ranks; each rank writes to
-`--output_dir` independently. We use `--compile` to enable torch.compile for faster inference, however,
-the first call will be slow due to the compilation. We use `default` mode, to get further speedup, change to the mode to `max-autotune` in `_maybe_compile_net (pid/_src/models/pixeldit_model.py:210)`.
+`--output_dir` independently. We use `--compile` to enable torch.compile for faster inference,
+the first call will be slow due to the compilation. We use `default` compilation mode, to get further speedup, change to the `max-autotune` mode in `_maybe_compile_net (pid/_src/models/pixeldit_model.py:210)`.
 
 ```bash
 PYTHONPATH=. torchrun --nproc_per_node=4 \
