@@ -35,7 +35,7 @@ space and produces a super-resolved image in one pass.
 ## Installation
 
 > [!TIP]
-> **Quick Start** — if your environment already has PyTorch (with CUDA), `transformers>=4.57.x`, and `diffusers>=0.37`, you don't need to build a new conda env. Just install the small set of utility deps the inference code pulls eagerly and you're ready to run the diffusers backbones (`flux`/`flux2`/`sd3`/`zimage`/`zimage_turbo`):
+> **Quick Start** — if your environment already has PyTorch (with CUDA), `transformers>=4.57.x`, and `diffusers>=0.37`, you don't need to build a new conda env. Just install the small set of utility deps the inference code pulls eagerly and you're ready to run the diffusers backbones (`flux`/`flux2`/`flux2-klein-4b`/`flux2-klein-9b`/`sd3`/`zimage`/`zimage-turbo`):
 >
 > ```bash
 > pip install hydra-core omegaconf pyyaml \
@@ -101,12 +101,14 @@ The `dinov2` and `siglip` backbones are the upstream RAE (DINOv2 encoder) and Sc
 |----------------|:-------------------------------------:|
 | flux           | `2k`, `2kto4k` |
 | flux2          | `2k`, `2kto4k` |
+| flux2-klein-4b | `2k`, `2kto4k` |
+| flux2-klein-9b | `2k`, `2kto4k` |
 | sd3            | `2k`, `2kto4k` |
 | zimage         | `2k`, `2kto4k` |
-| zimage_turbo   | `2k`, `2kto4k` |
+| zimage-turbo   | `2k`, `2kto4k` |
 | sdxl           | `2kto4k` |
 | qwenimage      | `2kto4k` |
-| qwenimage_2512 | `2kto4k` |
+| qwenimage-2512 | `2kto4k` |
 | dinov2 (RAE)   | `2k` |
 | siglip (Scale-RAE) | `2k` |
 
@@ -119,11 +121,14 @@ backbone), captures the intermediate `x_t` at user-specified denoising steps (ea
 termination) and the final clean `x_0`, then decodes each captured latent with both the
 native VAE / RAE decoder (baseline) and PiD.
 
-For `flux` / `flux2` / `sd3` / `sdxl` / `qwenimage` / `qwenimage_2512` / `zimage` /
-`zimage_turbo` the LDM is a HuggingFace `diffusers` pipeline (`FluxPipeline`,
-`Flux2Pipeline`, `StableDiffusion3Pipeline`, `StableDiffusionXLPipeline`,
-`QwenImagePipeline`, `ZImagePipeline`). `qwenimage_2512` is the Dec-2025 Qwen-Image
-refresh (same VAE + PiD student as `qwenimage`, different transformer).
+For `flux` / `flux2` / `flux2-klein-4b` / `flux2-klein-9b` / `sd3` / `sdxl` / `qwenimage` /
+`qwenimage-2512` / `zimage` / `zimage-turbo` the LDM is a HuggingFace `diffusers` pipeline
+(`FluxPipeline`, `Flux2Pipeline`, `Flux2KleinPipeline`, `StableDiffusion3Pipeline`,
+`StableDiffusionXLPipeline`, `QwenImagePipeline`, `ZImagePipeline`). `qwenimage-2512` is the
+Dec-2025 Qwen-Image refresh (same VAE + PiD student as `qwenimage`, different transformer);
+`flux2-klein-4b` / `flux2-klein-9b` are the distilled FLUX.2-klein models (`Flux2KleinPipeline`
+/ `FLUX.2-klein-4B` | `-9B`, same Flux2 VAE + PiD student as `flux2`, different transformer;
+4 steps + guidance 1.0 per the model cards).
 
 For `dinov2` and `siglip` the LDM is the upstream
 [RAE](https://github.com/bytetriper/RAE) (class-conditional ImageNet-512) or
@@ -176,7 +181,7 @@ for comparison. `--resolution 4096` means `H=4096, W=4096` and the LDM runs at `
 
 ```bash
 PYTHONPATH=. torchrun --nproc_per_node=4 \
-    -m pid._src.inference.from_ldm --backbone zimage_turbo \
+    -m pid._src.inference.from_ldm --backbone zimage-turbo \
     --prompt_file pid/_src/inference/prompts/prompt_zimage_turbo.txt \
     --resolution 4096 --pid_ckpt_type 2kto4k \
     --output_dir ./results/official_demo/zimage_turbo_4k
@@ -198,10 +203,12 @@ examples.
 | sd3      | `--ldm_inference_steps` | 28            | `22 24 26`                 | step `24`          |
 | sdxl     | `--ldm_inference_steps` | 30            | `24 26 28`                 | step `26`          |
 | flux2    | `--ldm_inference_steps` | 50            | `44 46 48`                 | step `46`          |
+| flux2-klein-4b | `--ldm_inference_steps` | 4      | `2 3`                      | `x0`               |
+| flux2-klein-9b | `--ldm_inference_steps` | 4      | `2 3`                      | `x0`               |
 | qwenimage | `--ldm_inference_steps` | 50 | `44 46 48`             | step `46`          |
-| qwenimage_2512 | `--ldm_inference_steps` | 50 | `44 46 48`             | step `46`          |
+| qwenimage-2512 | `--ldm_inference_steps` | 50 | `44 46 48`             | step `46`          |
 | zimage   | `--ldm_inference_steps` | 50            | `44 46 48`                 | step `46`          |
-| zimage_turbo | `--ldm_inference_steps` | 9         | `7`                        | `x0`               |
+| zimage-turbo | `--ldm_inference_steps` | 9         | `7`                        | `x0`               |
 
 ---
 ### 📗 `from_clean`: image → VAE encode → PiD decode

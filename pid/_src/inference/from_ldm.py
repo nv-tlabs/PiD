@@ -2,8 +2,8 @@
 
 Single entrypoint for every LDM backbone — pick one with `--backbone`:
 
-    diffusers backbones : flux, flux2, sd3, sdxl, qwenimage, qwenimage_2512,
-                          zimage, zimage_turbo
+    diffusers backbones : flux, flux2, flux2-klein-4b, flux2-klein-9b, sd3, sdxl,
+                          qwenimage, qwenimage-2512, zimage, zimage-turbo
     representation AEs  : dinov2, siglip
 
 Runs the backbone on a prompt (or class id for `dinov2`), captures the intermediate
@@ -20,9 +20,14 @@ SDXL note: SDXL is the only non-flow-matching backbone. Its captured `x_t` is re
 from the variance-exploding Euler frame to the VP frame the PiD-SDXL student trained on
 (see `pipeline_registry.to_training_frame`); from the CLI this is transparent.
 
-Qwen note: `--backbone qwenimage_2512` runs the Dec-2025 Qwen-Image refresh (same VAE +
+Qwen note: `--backbone qwenimage-2512` runs the Dec-2025 Qwen-Image refresh (same VAE +
 PiD student as `qwenimage`, different transformer). Large models — pass `--cpu_offload`
 on single-GPU runs.
+
+Flux2-klein note: `--backbone flux2-klein-4b` / `flux2-klein-9b` run the FLUX.2-klein
+distilled models (Flux2KleinPipeline / FLUX.2-klein-4B | -9B) — same Flux2 BN VAE + PiD
+student as `flux2`, different transformer. Defaults follow the model cards: 4 steps,
+guidance_scale=1.0.
 
 >>> Single GPU, single prompt (Flux, default 2k decoder):
 PYTHONPATH=. python -m pid._src.inference.from_ldm --backbone flux \
@@ -40,7 +45,7 @@ PYTHONPATH=. python -m pid._src.inference.from_ldm --backbone sdxl \
 
 >>> Multi-GPU, prompt file (Qwen-Image-2512):
 PYTHONPATH=. torchrun --nproc_per_node=4 -m pid._src.inference.from_ldm \
-    --backbone qwenimage_2512 --pid_ckpt_type 2kto4k --load_ema_to_reg --cpu_offload \
+    --backbone qwenimage-2512 --pid_ckpt_type 2kto4k --load_ema_to_reg --cpu_offload \
     --prompt_file pid/_src/inference/prompts/prompt_creative.txt \
     --ldm_inference_steps 50 --save_xt_steps 44 46 48 \
     --cfg_scale 1 --pid_inference_steps 4 --scale 4
@@ -80,7 +85,7 @@ torch.enable_grad(False)
 
 
 def run_ldm_demo(args):
-    """Diffusers-backbone demo flow (flux / flux2 / sd3 / sdxl / qwenimage* / zimage*)."""
+    """Diffusers-backbone demo flow (flux / flux2 / flux2-klein* / sd3 / sdxl / qwenimage* / zimage*)."""
     backbone = args.backbone
     rank, world_size = get_rank_and_world_size()
     maybe_init_distributed(world_size, rank)
