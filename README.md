@@ -179,8 +179,8 @@ examples.
 | flux2    | `--ldm_inference_steps` | 50            | `44 46 48`                 | step `46`          |
 | flux2-klein-4b | `--ldm_inference_steps` | 4      | `2 3`                      | `x0`               |
 | flux2-klein-9b | `--ldm_inference_steps` | 4      | `2 3`                      | `x0`               |
-| qwenimage | `--ldm_inference_steps` | 50 | `44 46 48`             | step `46`          |
-| qwenimage-2512 | `--ldm_inference_steps` | 50 | `44 46 48`             | step `46`          |
+| qwenimage | `--ldm_inference_steps` | 50 | `44 46 48`             | step `44`          |
+| qwenimage-2512 | `--ldm_inference_steps` | 50 | `44 46 48`             | step `44`          |
 | zimage   | `--ldm_inference_steps` | 50            | `44 46 48`                 | step `46`          |
 | zimage-turbo | `--ldm_inference_steps` | 9         | `7`                        | `x0`               |
 
