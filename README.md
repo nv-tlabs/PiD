@@ -24,40 +24,52 @@ space and produces a super-resolved image in one pass.
 [Xuanchi Ren](https://xuanchiren.com/) <br>
 
 ## News
+- 🚀 [July 9, 2026] PiD Training code released, with PiD v1.5 distilled and undistilled checkpoints.
+- 🚀 [July 9, 2026] PiD **v1.5** checkpoints for **FLUX**, **FLUX.2**, and **Qwen-Image** are released. Better color accuracy, no grid artifacts in the corners, trained with more anime data and small-face data. Check [here](https://research.nvidia.com/labs/sil/projects/pid/comparison.html) for visualization and comparisons.
 - 🔥 [June 2, 2026] PiD checkpoints for **SDXL**, **Qwen-Image** and **Qwen-Image-2512** are released. Check [HuggingFace](https://huggingface.co/nvidia/PiD).
-- 🔥 [June 2, 2026] A new checkpoint for **FLUX.2 (2kto4k)** (with `_2606` suffix) that has no color drifting issue. See [here](docs/FLUX2_2kto4k_new_ckpt_compare.md) for comparison with the old one.
 - 🔥 [June 2, 2026] We clean up the codebase and remove useless code. Torch.compile mode is also available now.
 - 🚀 [May 27, 2026] PiD is now in [ComfyUI](https://github.com/Comfy-Org/ComfyUI/pull/14103)!
 - 🚀 [May 25, 2026] Paper, code, and model weights released, with PiD options for **FLUX**, **FLUX.2**, **Z-Image**, **Z-Image-Turbo**, **SD3**, **DINOv2**, and **SigLIP**.
-- 🔜 [Coming Soon] PiD undistilled checkpoints.
-- ⏳ [Planned] Training scripts.
+
+## Table of Contents
+
+- [Installation](#installation)
+- [Download Checkpoints](#download-checkpoints)
+- [Running inference with released checkpoints](#running-inference-with-released-checkpoints)
+  - [LDM → PiD decode](#from-ldm)
+  - [image → PiD decode](#from-clean)
+- [Training](#training)
+- [Repository layout](docs/repository_layout.md)
 
 ## Installation
 
 > [!TIP]
-> **Quick Start** — if your environment already has PyTorch (with CUDA), `transformers>=4.57.x`, and `diffusers>=0.37`, you don't need to build a new conda env. Just install the small set of utility deps the inference code pulls eagerly and you're ready to run the diffusers backbones (`flux`/`flux2`/`flux2-klein-4b`/`flux2-klein-9b`/`sd3`/`zimage`/`zimage-turbo`):
+> **Quick Start** — if your existing Python environment already has PyTorch (with CUDA), `transformers>=4.57.x`, and `diffusers>=0.37`, you can use it directly. Just install the small set of utility dependencies the inference code imports eagerly, and you're ready to run the diffusers backbones (`flux`/`flux2`/`flux2-klein-4b`/`flux2-klein-9b`/`sd3`/`zimage`/`zimage-turbo`):
 >
 > ```bash
 > pip install hydra-core omegaconf pyyaml \
 >     attrs einops loguru termcolor fvcore iopath wandb \
 >     imageio opencv-python-headless pandas \
 >     safetensors sentencepiece boto3 botocore
-> pip install -e .
 > ```
-> To validate your environment is ready for inference, run `python verify_env.py`.
+>
+> Run commands from the repository root with `PYTHONPATH=.`.
+> To validate the environment, run `PYTHONPATH=. python verify_env.py`. If you see `[PASS] Environment OK — all required imports and CUDA checks passed.`, the environment is ready to use.
 
 
-Full conda-managed install (preferred if you're starting from scratch):
+If you want to create a new inference environment, `uv` is fast and easy to use.
+It create a project-local `.venv` with the locked base dependencies:
 
 ```bash
-conda env create -f environment.yml
-conda activate pid
-
-# 2. Install this package in editable mode.
-pip install -e .
+# install uv: https://docs.astral.sh/uv/getting-started/installation/
+# You can simply run `pip install uv`
+uv python install 3.12
+uv sync --frozen
+source .venv/bin/activate
+PYTHONPATH=. python verify_env.py
 ```
 
-### Download Checkpoints
+## Download Checkpoints
 
 Checkpoints are hosted at [`nvidia/PiD`](https://huggingface.co/nvidia/PiD) on the HuggingFace.
 Pull the `checkpoints/` folder into this repo:
@@ -66,7 +78,7 @@ Pull the `checkpoints/` folder into this repo:
 hf download nvidia/PiD --local-dir . --include "checkpoints/*"
 ```
 
-## Running inference
+## Running inference with released checkpoints
 
 PiD ships two complementary entry points, each selecting a backbone with `--backbone`:
 
@@ -75,30 +87,33 @@ PiD ships two complementary entry points, each selecting a backbone with `--back
 
 > [!IMPORTANT]
 > Picking the checkpoint variant — `--pid_ckpt_type`
-> Every entry point accepts `--pid_ckpt_type {2k,2kto4k}` (default `2k`):
+> Every entry point accepts `--pid_ckpt_type {2k,2kto4k,2kto4k_v1pt5}` (default `2k`):
 >
 > - **`2k`** — the original 2048px-trained decoder, trained with 2K resolution only. Multiple aspect ratios are supported, typically 2048 × 2048 (1:1), 2304 × 1728 (4:3), 1728 × 2304 (3:4), 2688 × 1536 (16:9), and 1536 × 2688 (9:16).
-> - **`2kto4k`** — the up-to-4K-resolution decoder, trained with varying resolution (from 2K to 4K). Multiple aspect ratios are supported. Worse than `2k` at 2048px resolution.
+> - **`2kto4k`** — the v1 up-to-4K-resolution decoder, trained with varying resolution (range from 2K to 4K). Multiple aspect ratios are supported. Less sharp than `2k` at 2048px resolution.
+> - **`2kto4k_v1pt5`** — the v1.5 up-to-4K-resolution decoder for **FLUX**, **FLUX.2**, **Qwen-Image (WAN2.1)** VAE (range from 2K to 4K). Better color accuracy, no grid artifacts in the corners, trained with more anime data and small-face data. Better than `2kto4k` overall but less sharp than `2k` at 2048px resolution.
 >
-> For the exact checkpoint path for each backbone, see [docs/checkpoints.md](docs/checkpoints.md).
+> For the exact checkpoint path for each backbone, see [docs/checkpoints.md](docs/checkpoints.md) and [checkpoint registry](pid/_src/inference/checkpoint_registry.py).
 
 
 | `--backbone`   | Currently available `--pid_ckpt_type` |
 |----------------|:-------------------------------------:|
-| flux           | `2k`, `2kto4k` |
-| flux2          | `2k`, `2kto4k` |
-| flux2-klein-4b | `2k`, `2kto4k` |
-| flux2-klein-9b | `2k`, `2kto4k` |
+| flux           | `2k`, `2kto4k_v1pt5` |
+| flux2          | `2k`, `2kto4k_v1pt5` |
+| flux2-klein-4b | `2k`, `2kto4k_v1pt5` |
+| flux2-klein-9b | `2k`, `2kto4k_v1pt5` |
+| zimage         | `2k`, `2kto4k_v1pt5` |
+| zimage-turbo   | `2k`, `2kto4k_v1pt5` |
 | sd3            | `2k`, `2kto4k` |
-| zimage         | `2k`, `2kto4k` |
-| zimage-turbo   | `2k`, `2kto4k` |
+| qwenimage      | `2kto4k_v1pt5` |
+| qwenimage-2512 | `2kto4k_v1pt5` |
 | sdxl           | `2kto4k` |
-| qwenimage      | `2kto4k` |
-| qwenimage-2512 | `2kto4k` |
 | dinov2 (RAE)   | `2k` |
 | siglip (Scale-RAE) | `2k` |
 
 For the exact checkpoint path behind each `(backbone, --pid_ckpt_type)`, see [docs/checkpoints.md](docs/checkpoints.md).
+
+<a id="from-ldm"></a>
 
 ### 📕 `from_ldm`: text / class → latent diffusion → PiD decode
 
@@ -117,16 +132,16 @@ PYTHONPATH=. python -m pid._src.inference.from_ldm --backbone flux \
     --pid_inference_steps 4
 ```
 
-#### Example 2 — Single-GPU, 4K decode with 4:3 aspect ratio (Flux, `2kto4k` decoder)
+#### Example 2 — Single-GPU, 4K decode with 4:3 aspect ratio (Flux, `2kto4k_v1pt5` decoder)
 
-Same backbone as Example 1 but with `--resolution 4096,3072 --pid_ckpt_type 2kto4k`.
+Same backbone as Example 1 but with `--resolution 4096,3072 --pid_ckpt_type 2kto4k_v1pt5`.
 `--resolution` is the final output size, so the LDM runs at `1024,768` and
 PiD decodes it to 4K.
 
 ```bash
 PYTHONPATH=. python -m pid._src.inference.from_ldm --backbone flux \
     --prompt "A close photograph of a cat looking through frosted glass beside a small pine branch, winter light, soft condensation, simple cozy composition, expressive eyes." \
-    --resolution 4096,3072 --pid_ckpt_type 2kto4k \
+    --resolution 4096,3072 --pid_ckpt_type 2kto4k_v1pt5 \
     --ldm_inference_steps 28 --save_xt_steps 24 26 \
     --output_dir ./results/official_demo/flux_4k_ar4_3
 ```
@@ -135,7 +150,7 @@ PYTHONPATH=. python -m pid._src.inference.from_ldm --backbone flux \
 
 `torchrun` shards `--prompt_file` across ranks; each rank writes to
 `--output_dir` independently. We use `--compile` to enable torch.compile for faster inference,
-the first call will be slow due to the compilation. We use `default` compilation mode, to get further speedup, change to the `max-autotune` mode in `_maybe_compile_net (pid/_src/models/pixeldit_model.py:210)`.
+the first call will be slow due to the compilation. We use `default` compilation mode, to get further speedup, change to the `max-autotune` mode in `_maybe_compile_net (pid/_src/models/pixeldit_model.py)`. Note that extra cudatoolkit like nvcc is required for the compilation.
 
 ```bash
 PYTHONPATH=. torchrun --nproc_per_node=4 \
@@ -146,7 +161,7 @@ PYTHONPATH=. torchrun --nproc_per_node=4 \
     --output_dir ./results/official_demo/zimage
 ```
 
-#### Example 4 — Multi-GPU, 4K decode (Z-Image-Turbo, `2kto4k` decoder)
+#### Example 4 — Multi-GPU, 4K decode (Z-Image-Turbo, `2kto4k_v1pt5` decoder)
 
 Z-Image-Turbo defaults to 9 diffusers steps with `guidance_scale=0.0`. The final
 clean latent `x0` is always saved and is the recommended Turbo output to inspect.
@@ -157,7 +172,7 @@ for comparison. `--resolution 4096` means `H=4096, W=4096` and the LDM runs at `
 PYTHONPATH=. torchrun --nproc_per_node=4 \
     -m pid._src.inference.from_ldm --backbone zimage-turbo \
     --prompt_file pid/_src/inference/prompts/prompt_zimage_turbo.txt \
-    --resolution 4096 --pid_ckpt_type 2kto4k \
+    --resolution 4096 --pid_ckpt_type 2kto4k_v1pt5 \
     --output_dir ./results/official_demo/zimage_turbo_4k
 ```
 
@@ -177,14 +192,16 @@ examples.
 | sd3      | `--ldm_inference_steps` | 28            | `22 24 26`                 | step `24`          |
 | sdxl     | `--ldm_inference_steps` | 30            | `24 26 28`                 | step `26`          |
 | flux2    | `--ldm_inference_steps` | 50            | `44 46 48`                 | step `46`          |
-| flux2-klein-4b | `--ldm_inference_steps` | 4      | `2 3`                      | `x0`               |
-| flux2-klein-9b | `--ldm_inference_steps` | 4      | `2 3`                      | `x0`               |
+| flux2-klein-4b | `--ldm_inference_steps` | 4      | `3`                      | `x0`               |
+| flux2-klein-9b | `--ldm_inference_steps` | 4      | `3`                      | `x0`               |
 | qwenimage | `--ldm_inference_steps` | 50 | `44 46 48`             | step `44`          |
 | qwenimage-2512 | `--ldm_inference_steps` | 50 | `44 46 48`             | step `44`          |
 | zimage   | `--ldm_inference_steps` | 50            | `44 46 48`                 | step `46`          |
 | zimage-turbo | `--ldm_inference_steps` | 9         | `7`                        | `x0`               |
 
 ---
+<a id="from-clean"></a>
+
 ### 📗 `from_clean`: image → VAE encode → PiD decode
 
 No latent diffusion model is run. The input image is fed at its native resolution
@@ -213,22 +230,25 @@ The `dinov2` / `siglip` `from_clean` flows take the same flags but with a differ
 interface (512 / 256) regardless of the input image size — see
 [`docs/dinov2_siglip.md`](docs/dinov2_siglip.md).
 
-## Repository layout
+## Training
 
+### Create the training environment
+We still use conda since it is easy to install CUDA toolkit.
+
+```bash
+conda env create -f environment.yml
+conda activate pid
+python -m pip install -e . --group full \
+    --extra-index-url https://download.pytorch.org/whl/cu128
 ```
-pid/_src/inference/
-├── from_ldm.py            # entrypoint: text/class → LDM → PiD decode (--backbone …)
-├── from_clean.py          # entrypoint: image → VAE encode → PiD decode (--backbone …)
-├── cli_utils.py           # argument parsers + backbone aliases for both entrypoints
-├── decoder.py             # shared PiD decode/save core (+ from_clean VAE round-trip & noising)
-├── step_capture.py        # diffusers callbacks: XtCaptureCallback / X0CaptureCallback
-├── inference_utils.py     # image/prompt/manifest IO, save_image, tags, AsyncUploader, S3 helpers
-├── checkpoint_registry.py # backbone → PiD checkpoint mapping
-├── pipeline_registry.py   # diffusers backbone → HF pipeline mapping
-├── rae_generation.py      # DINOv2-RAE backend + run_rae_demo (--backbone dinov2)
-├── scale_rae_generation.py# Scale-RAE backend + run_scale_rae_demo (--backbone siglip)
-└── prompts/               # prompt files
-```
+
+Check [Docker](docker/README.md) to create a training docker image.
+
+### Training Tutorial
+See the [training guide](docs/training.md) for dataset preparation and commands to finetune PixelDiT, train a PiD teacher, and distill a PiD student.
+
+To evaluate training experiment checkpoints, see [inference with training checkpoints](docs/inference.md) for PixelDiT, PiD teacher, and PiD student examples.
+
 
 ## License
 

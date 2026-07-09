@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
 import importlib
@@ -70,3 +70,20 @@ def load_model_from_checkpoint(
     torch.cuda.empty_cache()
 
     return model, config
+
+
+def create_model_from_consolidated_checkpoint(config):
+    """
+    Instantiate a model, load weights from a consolidated checkpoint, and initialize FSDP if required.
+
+    Args:
+        config: The configuration object for the experiment.
+
+    Returns:
+        model: The loaded and (optionally) FSDP-wrapped model.
+    """
+    model = instantiate(config.model)
+    # DCP checkpointer does not support loading from a consolidated checkpoint, so we support it here.
+    model.load_state_dict(easy_io.load(config.checkpoint.load_path))
+
+    return model

@@ -1,0 +1,6 @@
+# The dependency metadata is exposed to a BuildKit RUN bind mount, not copied
+# into the resulting image. Exclude source, checkpoints, datasets, and secrets
+# from the build context entirely.
+**
+!docker/
+!docker/requirements-ngc-overlay.txt

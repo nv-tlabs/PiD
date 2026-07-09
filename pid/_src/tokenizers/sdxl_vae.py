@@ -15,7 +15,7 @@
 #   cp <linear-vsr>/checkpoints/sdxl_vae.safetensors checkpoints/sdxl_vae.safetensors
 # (or download the SDXL VAE once and convert; the loader auto-handles diffusers→LDM keys).
 #
-# Mirrors the internal linear-vsr tokenizer (linearvsr/_src/tokenizers/sd_vae.py).
+# Mirrors the internal linear-vsr tokenizer (pid/_src/tokenizers/sd_vae.py).
 
 from contextlib import nullcontext
 

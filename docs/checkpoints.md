@@ -1,25 +1,40 @@
 # Checkpoint Reference
 
-| Backbone | `--pid_ckpt_type 2k` (default) | `--pid_ckpt_type 2kto4k` |
-|----------|--------------------------------|--------------------------|
-| flux     | `checkpoints/PiD_res2k_sr4x_official_flux_distill_4step`      | `checkpoints/PiD_res2kto4k_sr4x_official_flux_distill_4step`  |
-| flux2    | `checkpoints/PiD_res2k_sr4x_official_flux2_distill_4step`     | `checkpoints/PiD_res2kto4k_sr4x_official_flux2_distill_4step_2606` |
-| flux2-klein-4b | `checkpoints/PiD_res2k_sr4x_official_flux2_distill_4step`  | `checkpoints/PiD_res2kto4k_sr4x_official_flux2_distill_4step_2606` |
-| flux2-klein-9b | `checkpoints/PiD_res2k_sr4x_official_flux2_distill_4step`  | `checkpoints/PiD_res2kto4k_sr4x_official_flux2_distill_4step_2606` |
-| sd3      | `checkpoints/PiD_res2k_sr4x_official_sd3_distill_4step`       | `checkpoints/PiD_res2kto4k_sr4x_official_sd3_distill_4step`   |
-| zimage   | `checkpoints/PiD_res2k_sr4x_official_flux_distill_4step`      | `checkpoints/PiD_res2kto4k_sr4x_official_flux_distill_4step`  |
-| zimage-turbo | `checkpoints/PiD_res2k_sr4x_official_flux_distill_4step`  | `checkpoints/PiD_res2kto4k_sr4x_official_flux_distill_4step`  |
-| sdxl     | -                                                            | `checkpoints/PiD_res2kto4k_sr4x_official_sdxl_distill_4step`  |
-| qwenimage | -                                                           | `checkpoints/PiD_res2kto4k_sr4x_official_qwenimage_distill_4step` |
-| qwenimage-2512 | -                                                      | `checkpoints/PiD_res2kto4k_sr4x_official_qwenimage_distill_4step` |
-| dinov2   | `checkpoints/PiD_res2k_sr4x_official_dinov2_distill_4step`    | -                                                              |
-| siglip   | `checkpoints/PiD_res2k_sr8x_official_siglip_distill_4step`    | -                                                              |
+## Distilled Checkpoints
+
+| Backbone | decode 2k resolution only | decode 2k to 4k resolution |
+|----------|---------------------------|--------------------------------------|
+| flux     | `checkpoints/PiD_res2k_sr4x_official_flux_distill_4step`      | `checkpoints/PiD_v1pt5_res2kto4k_sr4x_official_flux_distill_4step` |
+| flux2    | `checkpoints/PiD_res2k_sr4x_official_flux2_distill_4step`     | `checkpoints/PiD_v1pt5_res2kto4k_sr4x_official_flux2_distill_4step` |
+| flux2-klein-4b | `checkpoints/PiD_res2k_sr4x_official_flux2_distill_4step`  | `checkpoints/PiD_v1pt5_res2kto4k_sr4x_official_flux2_distill_4step` |
+| flux2-klein-9b | `checkpoints/PiD_res2k_sr4x_official_flux2_distill_4step`  | `checkpoints/PiD_v1pt5_res2kto4k_sr4x_official_flux2_distill_4step` |
+| zimage   | `checkpoints/PiD_res2k_sr4x_official_flux_distill_4step`      | `checkpoints/PiD_v1pt5_res2kto4k_sr4x_official_flux_distill_4step` |
+| zimage-turbo | `checkpoints/PiD_res2k_sr4x_official_flux_distill_4step`  | `checkpoints/PiD_v1pt5_res2kto4k_sr4x_official_flux_distill_4step` |
+| qwenimage | -                                                           | `checkpoints/PiD_v1pt5_res2kto4k_sr4x_official_qwenimage_distill_4step` |
+| qwenimage-2512 | -                                                      | `checkpoints/PiD_v1pt5_res2kto4k_sr4x_official_qwenimage_distill_4step` |
+| sd3      | `checkpoints/PiD_res2k_sr4x_official_sd3_distill_4step`       | `checkpoints/PiD_res2kto4k_sr4x_official_sd3_distill_4step` |
+| sdxl     | -                                                            | `checkpoints/PiD_res2kto4k_sr4x_official_sdxl_distill_4step` |
+| dinov2   | `checkpoints/PiD_res2k_sr4x_official_dinov2_distill_4step`    | - |
+| siglip   | `checkpoints/PiD_res2k_sr8x_official_siglip_distill_4step`    | - |
 
 All released checkpoints are 4-step distilled. The `flux` / `flux2` / `sd3` /
 `sdxl` / `qwenimage` / `zimage` / `zimage-turbo` / `dinov2` checkpoints decode at
 4x upscale; the `siglip` checkpoint decodes at 8x (256 -> 2048, Scale-RAE's native
-interface). `sdxl` and `qwenimage` (incl. `qwenimage-2512`) ship only the `2kto4k`
-decoder. `flux2-klein-4b` / `flux2-klein-9b` reuse the `flux2` decoders (both `2k` and `2kto4k`).
+interface).
+
+## Undistilled Checkpoints
+
+| VAE | decode 2k to 4k resolution |
+|----------|--------------------------------------|
+| flux     | `checkpoints/PiD_v1pt5_res2kto4k_sr4x_official_flux_undistilled` |
+| flux2    | `checkpoints/PiD_v1pt5_res2kto4k_sr4x_official_flux2_undistilled` |
+| qwenimage (wan2.1) | `checkpoints/PiD_v1pt5_res2kto4k_sr4x_official_qwenimage_undistilled` |
+
+## PixelDiT 2kto4k Checkpoint
+
+| Model | Checkpoint path |
+|-------|-----------------|
+| PixelDiT | `checkpoints/PixelDiT_finetune_2kto4k` |
 
 ## VAE encoder weights
 

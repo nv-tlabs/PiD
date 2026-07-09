@@ -2,47 +2,12 @@ name: pid
 channels:
   - conda-forge
 dependencies:
-  - python=3.10
-  - pip
-  - pip:
-      - --extra-index-url=https://download.pytorch.org/whl/cu128
-      - torch==2.10.0
-      - torchvision==0.25.0
-
-      # ---- HuggingFace stack (pipelines used: Flux, Flux2, SD3, Z-Image,
-      #      Z-Image-Turbo, QwenImage).
-      #      diffusers needs >=0.37 for Flux2 / Z-Image / QwenImage support.
-      #      transformers is left unpinned here — the core diffusers backbones
-      #      work on both 4.x and 5.x. If you also use the Scale-RAE siglip
-      #      backbone (from_ldm_siglip), see docs/dinov2_siglip.md: that path
-      #      requires transformers<5 (4.57.x verified) because Scale-RAE's
-      #      custom Qwen LM is tightly coupled to the transformers 4.x API. ----
-      - diffusers>=0.37.0
-      - transformers
-      - safetensors
-      - sentencepiece
-
-      - numpy
-      - pandas
-      - pillow
-      - imageio
-      - opencv-python-headless
-      - einops
-
-      - hydra-core
-      - omegaconf
-      - pyyaml
-      - attrs
-      - attr
-
-      # ---- Logging / utils ----
-      - loguru
-      - termcolor
-      - fvcore
-      - iopath
-      - wandb
-      - packaging
-
-      # ---- Optional: S3 upload of inference outputs (boto3 is imported lazily).
-      - boto3
-      - botocore
+  - python=3.12
+  - pip>=25.1
+  - cmake
+  - ninja
+  - gcc=13.3.0
+  - gxx=13.3.0
+  - cuda=12.8
+  - cuda-nvcc=12.8
+  - cuda-toolkit=12.8

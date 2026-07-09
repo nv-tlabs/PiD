@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -805,7 +805,9 @@ class DistributedCheckpointer(AbstractCheckpointer):
         if checkpoint_path is not None and not checkpoint_path.endswith(".pth"):
             self._check_checkpoint_exists(checkpoint_path)
             for key in resume_keys:
-                load_planner = DefaultLoadPlanner(allow_partial_load=True)
+                # Self-resume must be exact; partial loads can hide missing
+                # optimizer/scheduler/trainer state and corrupt continuation.
+                load_planner = DefaultLoadPlanner(allow_partial_load=not is_self_resume)
                 cur_key_ckpt_full_path = os.path.join(checkpoint_path, key)
                 log.info(f"Start loading checkpoint from {checkpoint_path}")
                 storage_reader = self.get_storage_reader(cur_key_ckpt_full_path)
@@ -874,6 +876,26 @@ class DistributedCheckpointer(AbstractCheckpointer):
             log.info(f"Loaded checkpoint from {checkpoint_path} in iteration {iteration}")
         elif checkpoint_path is not None and checkpoint_path.endswith(".pth"):
             state = easy_io.load(checkpoint_path)
+            should_replicate_ema = (
+                self.config_checkpoint.replicate_ema_to_reg_in_training
+                and not is_self_resume
+                and not self.load_training_state
+            )
+            if should_replicate_ema:
+                ema_keys = [k for k in state.keys() if isinstance(k, str) and k.startswith("net_ema.")]
+                if not ema_keys:
+                    raise ValueError(
+                        f"replicate_ema_to_reg_in_training is True, but checkpoint at "
+                        f"{checkpoint_path} does not contain EMA weights (no 'net_ema.*' keys). "
+                        f"Set replicate_ema_to_reg_in_training=False or use a checkpoint with EMA weights."
+                    )
+                for k in ema_keys:
+                    v = state[k]
+                    state[k.replace("net_ema.", "net.", 1)] = torch.clone(v) if isinstance(v, torch.Tensor) else v
+                log.warning(
+                    f"replicate_ema_to_reg_in_training is True for .pth load; "
+                    f"copied {len(ema_keys)} net_ema.* tensors to net.*"
+                )
             model_state = model.net.state_dict()
 
             for k, v in list(state.items()):

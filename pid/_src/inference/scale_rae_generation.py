@@ -1,18 +1,35 @@
-# Scale-RAE T2I generation helpers for the from_ldm --backbone siglip demo.
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 #
-# Loads the Scale-RAE Qwen 1.5B + DiT 2.4B latent-diffusion model
-# (`nyu-visionx/Scale-RAE-Qwen1.5B_DiT2.4B`) plus the SigLIP-2 ViT-XL
-# `MultimodalDecoder`, and provides a text-prompt → (latent, image) generation
-# function. Optional `--save_xt_steps K1 K2 …` snapshots the diffusion
-# trajectory by monkey-patching `model.diff_head.inference_flow.p_sample_loop`
-# (no upstream code is modified).
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
 #
-# Requires the upstream Scale-RAE GitHub repo
-# (https://github.com/ZitengWangNYU/Scale-RAE) cloned somewhere on disk and
-# installed via ``pip install --no-deps -e .``. The location is resolved
-# from the ``SCALE_RAE_REPO_PATH`` environment variable (default:
-# ``../Scale-RAE``, i.e. cloned as a sibling of the pid working tree); the
-# ``--scale_rae_repo_path`` CLI flag falls back to that default.
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""
+Scale-RAE T2I generation helpers for the from_ldm --backbone siglip demo.
+
+Loads the Scale-RAE Qwen 1.5B + DiT 2.4B latent-diffusion model
+(`nyu-visionx/Scale-RAE-Qwen1.5B_DiT2.4B`) plus the SigLIP-2 ViT-XL
+`MultimodalDecoder`, and provides a text-prompt → (latent, image) generation
+function. Optional `--save_xt_steps K1 K2 …` snapshots the diffusion
+trajectory by monkey-patching `model.diff_head.inference_flow.p_sample_loop`
+(no upstream code is modified).
+
+Requires the upstream Scale-RAE GitHub repo
+(https://github.com/ZitengWangNYU/Scale-RAE) cloned somewhere on disk and
+installed via ``pip install --no-deps -e .``. The location is resolved
+from the ``SCALE_RAE_REPO_PATH`` environment variable (default:
+``../Scale-RAE``, i.e. cloned as a sibling of the pid working tree); the
+``--scale_rae_repo_path`` CLI flag falls back to that default.
+"""
 
 import argparse
 import json

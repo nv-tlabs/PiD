@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,6 +23,7 @@ This module provides common functions for:
 - S3 upload utilities + the AsyncUploader thread pool (optional)
 """
 
+import io
 import json
 import logging
 import os
@@ -42,7 +43,7 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 
 # AWS Profile name for S3 access
-S3_PROFILE_NAME = "pdx-yiflu"
+S3_PROFILE_NAME = "pdx-yifanlu"
 
 # Default S3 bucket name
 S3_BUCKET_NAME = "pid"
@@ -491,3 +492,56 @@ class AsyncUploader:
         self._executor.shutdown(wait=False)
         if failed:
             logger.warning(f"{failed} upload(s) failed")
+
+
+def decode_image_bytes_to_tensor(png_bytes: bytes, device: str = "cpu") -> th.Tensor:
+    """Decode image bytes (PNG/JPG/etc) to [1, C, H, W] float32 tensor in [-1, 1].
+
+    Inverse of encode_tensor_as_png(). Also works with JPEG and other PIL-supported formats.
+    """
+    pil_img = Image.open(io.BytesIO(png_bytes)).convert("RGB")
+    arr = np.array(pil_img, dtype=np.uint8)
+    t = th.from_numpy(arr).float().permute(2, 0, 1) / 127.5 - 1.0  # [C, H, W] in [-1, 1]
+    return t.unsqueeze(0).to(device)  # [1, C, H, W]
+
+
+def load_fix_batch(pt_path: str, device: str = "cpu") -> dict:
+    """Load a fix_batch .pt file, auto-detecting image vs video payloads.
+
+    Handles both new format ("HQ_video_or_image") and legacy format ("image").
+    Adds exactly one model-facing alias for GT pixels:
+    - image fix_batch -> "image"
+    - video fix_batch -> "video"
+
+    Returns dict with tensors in [-1, 1] float32:
+        "HQ_video_or_image": [1, 3, H, W] or [1, 3, T, H, W]
+        "LQ_video_or_image": [1, 3, H_lq, W_lq] or [1, 3, T, H_lq, W_lq]
+        "LQ_latent": optional pre-computed latent
+        "caption": list[str]
+    """
+    data = th.load(pt_path, map_location="cpu", weights_only=False)
+
+    for key in ["HQ_video_or_image", "LQ_video_or_image"]:
+        if key not in data:
+            continue
+        val = data[key]
+        if isinstance(val, bytes):
+            # Image bytes (PNG/JPG) -> decode to tensor
+            data[key] = decode_image_bytes_to_tensor(val, device=device)
+        elif isinstance(val, th.Tensor):
+            # Raw tensor (legacy format)
+            if val.dtype == th.uint8:
+                data[key] = val.float() / 127.5 - 1.0
+            data[key] = data[key].to(device)
+
+    # Move LQ_latent to target device if present
+    if "LQ_latent" in data and isinstance(data["LQ_latent"], th.Tensor):
+        data["LQ_latent"] = data["LQ_latent"].to(device)
+        if data["LQ_latent"].ndim == 3:
+            data["LQ_latent"] = data["LQ_latent"].unsqueeze(0)
+
+    if "HQ_video_or_image" in data:
+        data["image"] = data["HQ_video_or_image"]
+        data.setdefault("media_type", "image")
+
+    return data

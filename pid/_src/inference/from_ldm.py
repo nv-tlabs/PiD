@@ -1,3 +1,18 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """Official demo: text/class → latent diffusion → PiD pixel-decode.
 
 Single entrypoint for every LDM backbone — pick one with `--backbone`:
@@ -45,7 +60,7 @@ PYTHONPATH=. python -m pid._src.inference.from_ldm --backbone sdxl \
 
 >>> Multi-GPU, prompt file (Qwen-Image-2512):
 PYTHONPATH=. torchrun --nproc_per_node=4 -m pid._src.inference.from_ldm \
-    --backbone qwenimage-2512 --pid_ckpt_type 2kto4k --load_ema_to_reg --cpu_offload \
+    --backbone qwenimage-2512 --pid_ckpt_type 2kto4k_v1pt5 --load_ema_to_reg --cpu_offload \
     --prompt_file pid/_src/inference/prompts/prompt_creative.txt \
     --ldm_inference_steps 50 --save_xt_steps 44 46 48 \
     --cfg_scale 1 --pid_inference_steps 4 --scale 4

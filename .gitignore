@@ -73,6 +73,7 @@ dmypy.json
 *.bin
 data/
 checkpoints/
+checkpoints_deprecated/
 outputs/
 logs/
 wandb/
@@ -117,7 +118,6 @@ test/degradation_consistency/
 .vscode
 .zprofile
 .zshrc
-config
 HEAD
 hooks
 objects
@@ -130,3 +130,4 @@ slurm-*.out
 
 pid/_src/inference/video_demo
 convert_dcp_to_pt.py
+assets/pid_callback_assets

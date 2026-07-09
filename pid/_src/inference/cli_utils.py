@@ -1,10 +1,27 @@
-# CLI construction + argument parsing for the from_ldm / from_clean dispatchers.
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 #
-# Both demos select the backbone with a single `--backbone` flag whose choices are the
-# canonical registry keys. The parser shape for from_ldm is backbone-flavored (diffusers
-# backbones expose --ldm_inference_steps / --guidance_scale / --cpu_offload /
-# --backbone_model_id; dinov2 / siglip expose their own arg groups), so we pre-parse
-# --backbone first, then build the full parser.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""
+CLI construction + argument parsing for the from_ldm / from_clean dispatchers.
+
+Both demos select the backbone with a single `--backbone` flag whose choices are the
+canonical registry keys. The parser shape for from_ldm is backbone-flavored (diffusers
+backbones expose --ldm_inference_steps / --guidance_scale / --cpu_offload /
+--backbone_model_id; dinov2 / siglip expose their own arg groups), so we pre-parse
+--backbone first, then build the full parser.
+"""
 
 import argparse
 
@@ -51,9 +68,10 @@ def maybe_init_distributed(world_size: int, rank: int):
     if world_size > 1:
         import torch.distributed as dist
 
+        device = torch.device("cuda", rank)
+        torch.cuda.set_device(device)
         if not dist.is_initialized():
-            dist.init_process_group(backend="nccl")
-        torch.cuda.set_device(rank)
+            dist.init_process_group(backend="nccl", device_id=device)
 
 
 def _add_common_decoder_args(parser: argparse.ArgumentParser, default_output_subdir: str, default_seed: int = 0):
@@ -85,8 +103,9 @@ def _add_common_decoder_args(parser: argparse.ArgumentParser, default_output_sub
         default="2k",
         help="Which PiD checkpoint variant to load from the registry when "
         "--experiment / --checkpoint_path are omitted. Default: '2k' (the "
-        "original 2048px-trained decoders). '2kto4k' picks the multi-res-"
-        "trained decoders (1024 LDM → 4K output).",
+        "original 2048px-trained decoders). '2kto4k' picks the v1 multi-res "
+        "decoders; '2kto4k_v1pt5' picks the v1.5 multi-res decoders "
+        "(1024 LDM → 4K output).",
     )
     parser.add_argument("--load_ema_to_reg", action="store_true", help="Load EMA weights into the regular model")
 
@@ -306,9 +325,7 @@ def build_clean_parser(backbone: str) -> argparse.ArgumentParser:
         default=None,
         help="Text prompt describing the input image — fed into the pixel decoder's data batch as the "
         "caption condition. Under --input_path, this is THE prompt. Under --manifest, this is the "
-        "fallback used for entries without a per-line 'prompt' key. If omitted entirely, falls back "
-        "to model.config.fixed_positive_prompt when model.config.use_fixed_prompt is True; otherwise "
-        "the script raises for any sample with no resolvable caption.",
+        "fallback used for entries without a per-line 'prompt' key.",
     )
 
     # The input image is always fed at its native resolution (only center-cropped so each

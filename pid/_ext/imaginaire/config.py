@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -31,6 +31,7 @@ try:
     USE_MEGATRON = True
 except ImportError:
     USE_MEGATRON = False
+    print("Megatron-core is not installed.")
 
 from pid._ext.imaginaire.lazy_config import LazyCall as L
 from pid._ext.imaginaire.lazy_config import LazyDict

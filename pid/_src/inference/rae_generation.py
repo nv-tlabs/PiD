@@ -1,16 +1,33 @@
-# RAE (Representation Autoencoder) generation helpers for the from_ldm --backbone dinov2 demo.
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 #
-# Loads the DINOv2-B encoder + ViT-XL decoder (stage-1 RAE) and the DiT^DH-XL
-# class-conditional ImageNet-512 diffusion model (stage-2) + DiT^DH-S guidance
-# model, then provides a `sample_fn` that returns the full ODE trajectory in
-# one call. Capturing `--save_xt_steps K` intermediates is a tensor index into
-# that trajectory — no callback plumbing needed.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
 #
-# Requires the upstream RAE GitHub repo (https://github.com/bytetriper/RAE)
-# cloned somewhere on disk. The location is resolved from the
-# ``RAE_REPO_PATH`` environment variable (default: ``../RAE``, i.e. cloned
-# as a sibling of the pid working tree); the ``--rae_repo_path`` CLI flag
-# falls back to that default.
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""
+RAE (Representation Autoencoder) generation helpers for the from_ldm --backbone dinov2 demo.
+
+Loads the DINOv2-B encoder + ViT-XL decoder (stage-1 RAE) and the DiT^DH-XL
+class-conditional ImageNet-512 diffusion model (stage-2) + DiT^DH-S guidance
+model, then provides a `sample_fn` that returns the full ODE trajectory in
+one call. Capturing `--save_xt_steps K` intermediates is a tensor index into
+that trajectory — no callback plumbing needed.
+
+Requires the upstream RAE GitHub repo (https://github.com/bytetriper/RAE)
+cloned somewhere on disk. The location is resolved from the
+``RAE_REPO_PATH`` environment variable (default: ``../RAE``, i.e. cloned
+as a sibling of the pid working tree); the ``--rae_repo_path`` CLI flag
+falls back to that default.
+"""
 
 import argparse
 import logging

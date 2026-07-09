@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,8 +22,10 @@ import functools
 import os
 from contextlib import contextmanager
 from datetime import timedelta
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Container, Optional
 
+import pynvml
 import torch
 import torch.distributed as dist
 from torch.distributed import get_process_group_ranks
@@ -42,13 +44,36 @@ if TYPE_CHECKING:
 try:
     from megatron.core import parallel_state
 except ImportError:
-    pass
+    print("Megatron-core is not installed.")
+
+
+def _load_libcudart() -> ctypes.CDLL:
+    """Load CUDA Runtime from either a system toolkit or PyTorch's wheel dependency."""
+    candidates = []
+    cuda_version = torch.version.cuda
+    if cuda_version:
+        soname = f"libcudart.so.{cuda_version.split('.', maxsplit=1)[0]}"
+        candidates.append(soname)
+        try:
+            import nvidia.cuda_runtime
+
+            candidates.extend(str(Path(package_dir) / "lib" / soname) for package_dir in nvidia.cuda_runtime.__path__)
+        except ImportError:
+            pass
+    candidates.append("libcudart.so")
+
+    errors = []
+    for candidate in candidates:
+        try:
+            return ctypes.CDLL(candidate)
+        except OSError as error:
+            errors.append(f"{candidate}: {error}")
+
+    raise OSError("Unable to load CUDA Runtime; tried " + "; ".join(errors))
 
 
 def init() -> int | None:
     """Initialize distributed training."""
-    import pynvml
-
     if dist.is_initialized():
         return torch.cuda.current_device()
 
@@ -69,17 +94,30 @@ def init() -> int | None:
         timeout_seconds = os.getenv("TORCH_NCCL_HEARTBEAT_TIMEOUT_SEC", 1800)
         # Convert the timeout to an integer (if it isn't already) and then to a timedelta
         timeout_timedelta = timedelta(seconds=int(timeout_seconds))
-        dist.init_process_group(backend="nccl", init_method="env://", timeout=timeout_timedelta)
+        dist.init_process_group(
+            backend="nccl",
+            init_method="env://",
+            timeout=timeout_timedelta,
+            device_id=torch.device("cuda", local_rank),
+        )
         log.info(
             f"Initialized distributed training with local rank {local_rank} with timeout {timeout_seconds}",
             rank0_only=False,
         )
-    # Increase the L2 fetch granularity for faster speed.
-    _libcudart = ctypes.CDLL("libcudart.so")
-    # Set device limit on the current device.
-    p_value = ctypes.cast((ctypes.c_int * 1)(), ctypes.POINTER(ctypes.c_int))
-    _libcudart.cudaDeviceSetLimit(ctypes.c_int(0x05), ctypes.c_int(128))
-    _libcudart.cudaDeviceGetLimit(p_value, ctypes.c_int(0x05))
+    # Increase the L2 fetch granularity for faster speed. PyTorch CUDA wheels
+    # bundle a versioned libcudart (for example, libcudart.so.12) without the
+    # unversioned symlink provided by a full CUDA toolkit.
+    try:
+        _libcudart = _load_libcudart()
+        cuda_device_set_limit = _libcudart.cudaDeviceSetLimit
+        cuda_device_set_limit.argtypes = (ctypes.c_int, ctypes.c_size_t)
+        cuda_device_set_limit.restype = ctypes.c_int
+        result = cuda_device_set_limit(0x05, 128)
+        if result != 0:
+            log.warning(f"Failed to set CUDA L2 fetch granularity (CUDA error {result}).")
+    except (AttributeError, OSError) as error:
+        # This is only a performance hint; CUDA training can continue without it.
+        log.warning(f"Skipping CUDA L2 fetch granularity tuning: {error}")
     log.info(f"Training with {get_world_size()} GPUs.")
 
 

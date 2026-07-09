@@ -46,7 +46,7 @@ Then `git add .` again and `git commit` again.
 
 ## Code style
 
-- Python target is **3.10**; formatter and linter are both **ruff**
+- Python target is **3.12**; formatter and linter are both **ruff**
   (configured in `pyproject.toml`). Ruff replaces black + isort + flake8
   here — please don't introduce other formatters.
 - Line length is **120**.

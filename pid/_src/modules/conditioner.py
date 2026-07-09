@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -118,12 +118,10 @@ class PidCondition(BaseCondition):
     """Condition for PID (PixelDiT SR) models.
 
     caption: list[str] — raw caption strings (after dropout).
-    lq_video_or_image: [B, 3, H_lq, W_lq] — LQ image at original low resolution.
     lq_latent: [B, z_dim, zH, zW] — LQ VAE latent.
     """
 
     caption: Optional[list] = None
-    lq_video_or_image: Optional[torch.Tensor] = None
     lq_latent: Optional[torch.Tensor] = None
 
 
@@ -442,35 +440,26 @@ class PixelDiTConditioner(GeneralConditioner):
 
 
 class LQTensorDrop(AbstractEmbModel):
-    """Embedder for LQ tensors (image or latent) with per-sample zero dropout.
+    """Embedder for LQ latent tensors with per-sample zero dropout.
 
-    On dropout, the tensor is replaced with a zero tensor of the same shape.
-    Supports coupled dropout: when coupled_with is set, this embedder reuses
-    the dropout mask from the coupled embedder (stored in _shared_lq_keep_mask).
+    On dropout, the latent is replaced with a zero tensor of the same shape.
 
     Args:
-        input_key: key in data_batch (e.g. "LQ_video_or_image" or "LQ_latent").
-        output_key: key in condition output (e.g. "lq_video_or_image" or "lq_latent").
+        input_key: key in data_batch containing the LQ latent.
+        output_key: key in condition output for the LQ latent.
         dropout_rate: probability of zeroing out the tensor (for CFG training).
-        is_primary: if True, this embedder generates the shared dropout mask.
-            If False, it reuses the mask from the primary embedder.
     """
-
-    # Class-level shared mask for coupled dropout (reset each forward pass)
-    _shared_lq_keep_mask: Optional[torch.Tensor] = None
 
     def __init__(
         self,
-        input_key: str = "LQ_video_or_image",
-        output_key: str = "lq_video_or_image",
+        input_key: str = "LQ_latent",
+        output_key: str = "lq_latent",
         dropout_rate: float = 0.0,
-        is_primary: bool = True,
     ):
         super().__init__()
         self._input_key = input_key
         self._dropout_rate = dropout_rate
         self._output_key = output_key
-        self._is_primary = is_primary
 
     def forward(self, element: torch.Tensor) -> Dict[str, torch.Tensor]:
         return {self._output_key: element}
@@ -481,64 +470,31 @@ class LQTensorDrop(AbstractEmbModel):
         del key
         dropout_rate = dropout_rate if dropout_rate is not None else self.dropout_rate
         if dropout_rate <= 0 or in_tensor is None:
-            if self._is_primary:
-                LQTensorDrop._shared_lq_keep_mask = None
             return in_tensor
 
-        B = in_tensor.shape[0]
-        if self._is_primary:
-            # Generate and store shared mask
-            keep_mask = torch.bernoulli((1.0 - dropout_rate) * torch.ones(B, device=in_tensor.device))
-            LQTensorDrop._shared_lq_keep_mask = keep_mask
-        else:
-            # Reuse mask from primary embedder
-            keep_mask = LQTensorDrop._shared_lq_keep_mask
-            if keep_mask is None:
-                # Fallback: generate own mask if primary hasn't run yet
-                keep_mask = torch.bernoulli((1.0 - dropout_rate) * torch.ones(B, device=in_tensor.device))
-
-        keep_mask_expanded = keep_mask.view(B, *[1] * (in_tensor.dim() - 1)).type_as(in_tensor)
+        batch_size = in_tensor.shape[0]
+        keep_mask = torch.bernoulli((1.0 - dropout_rate) * torch.ones(batch_size, device=in_tensor.device))
+        keep_mask_expanded = keep_mask.view(batch_size, *[1] * (in_tensor.dim() - 1)).type_as(in_tensor)
         return keep_mask_expanded * in_tensor
 
     def details(self) -> str:
-        return f"Output key: {self._output_key}, primary: {self._is_primary}"
+        return f"Output key: {self._output_key}"
 
 
 class PidConditioner(PixelDiTConditioner):
     """Conditioner for PID (PixelDiT SR) models. Returns PidCondition.
 
-    Handles caption strings (CaptionStringDrop) + LQ tensors (LQTensorDrop).
-    LQ image and LQ latent share coupled dropout: when one is dropped, both are.
+    Handles caption strings (CaptionStringDrop) and LQ latents (LQTensorDrop).
+    The source LQ image remains training/callback data and is not a condition.
 
-    Inherits get_condition_uncondition from GeneralConditioner which respects
-    per-embedder dropout_rate: if caption dropout_rate=0, caption is never
-    dropped in uncondition (only LQ gets dropped for CFG).
+    Its CFG condition/uncondition construction respects each embedder's
+    configured dropout rate: if caption dropout_rate=0, caption is retained in
+    uncondition and only the LQ latent is dropped.
 
     Embedders typically include:
       - caption: CaptionStringDrop (raw string dropout)
-      - lq_video_or_image: LQTensorDrop (primary, generates shared mask)
-      - lq_latent: LQTensorDrop (secondary, reuses shared mask)
+      - lq_latent: LQTensorDrop (per-sample zero dropout)
     """
-
-    def _forward(
-        self,
-        batch: Dict,
-        override_dropout_rate: Optional[Dict[str, float]] = None,
-    ) -> Dict:
-        """Process embedders. Handles both string (caption) and tensor (LQ) outputs."""
-        output = {}
-        if override_dropout_rate is None:
-            override_dropout_rate = {}
-        # Reset shared mask at start of each forward
-        LQTensorDrop._shared_lq_keep_mask = None
-        for emb_name, embedder in self.embedders.items():
-            embedding_context = nullcontext if embedder.is_trainable else torch.no_grad
-            with embedding_context():
-                in_data = batch[embedder.input_key]
-                in_data = embedder.random_dropout_input(in_data, override_dropout_rate.get(emb_name, None))
-                emb_out = embedder(in_data)
-            output.update(emb_out)
-        return output
 
     def forward(
         self,

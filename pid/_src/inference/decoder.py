@@ -1,9 +1,26 @@
-# Shared "PiD pixel decoder" runtime for both demos.
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 #
-#   - load_our_decoder      : instantiate the PiD model from a checkpoint.
-#   - capture_steps         : iterate (step_label, latent, sigma) over captured xt + final x0 (from_ldm).
-#   - run_ours_and_save_step: run PiD once on a (latent, baseline) pair, save both, optionally upload.
-#   - vae_decode / add_noise: VAE round-trip + forward-noising for the from_clean path.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""
+Shared "PiD pixel decoder" runtime for both demos.
+
+  - load_our_decoder      : instantiate the PiD model from a checkpoint.
+  - capture_steps         : iterate (step_label, latent, sigma) over captured xt + final x0 (from_ldm).
+  - run_ours_and_save_step: run PiD once on a (latent, baseline) pair, save both, optionally upload.
+  - vae_decode / add_noise: VAE round-trip + forward-noising for the from_clean path.
+"""
 
 import logging
 import os
