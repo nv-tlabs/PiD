@@ -131,3 +131,4 @@ slurm-*.out
 pid/_src/inference/video_demo
 convert_dcp_to_pt.py
 assets/pid_callback_assets
+third_party/

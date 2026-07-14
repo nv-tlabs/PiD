@@ -10,6 +10,7 @@ pid/_src/
 ├── inference/
 │   ├── from_ldm.py             # Text/class → LDM → PiD decode.
 │   ├── from_clean.py           # Image → VAE/RAE → PiD decode.
+│   ├── from_boogu.py           # Boogu-Image text → image, optional Flux1 PiD decode.
 │   ├── decoder.py              # Shared PiD loading and decoding.
 │   ├── checkpoint_registry.py  # Maps backbones to released checkpoints.
 │   ├── pipeline_registry.py    # Diffusers pipeline definitions.

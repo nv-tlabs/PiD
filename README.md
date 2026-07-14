@@ -24,6 +24,7 @@ space and produces a super-resolved image in one pass.
 [Xuanchi Ren](https://xuanchiren.com/) <br>
 
 ## News
+- 🚀 [July 14, 2026] PiD adds optional [**Boogu-Image**](docs/boogu_image.md) text-to-image support, including Boogu native generation and **Flux1 PiD decode** from Boogu's Flux-style VAE latents.
 - 🚀 [July 9, 2026] PiD Training code released, with [PiD v1.5 and PixelDiT (2kto4k)](https://huggingface.co/nvidia/PiD/commit/3348c59bb545d9d0e29c2dec4c79b94592b83e8c) **distilled** and **undistilled** checkpoints!
 - 🚀 [July 9, 2026] PiD **v1.5** checkpoints for **FLUX** (**Z-Image**, **Z-Image-Turbo**), **FLUX.2**,  and **Qwen-Image** are released. Check [release page](https://research.nvidia.com/labs/sil/projects/pid/comparison.html) to see improvements!
 - 🔥 [June 2, 2026] PiD checkpoints for **SDXL**, **Qwen-Image** and **Qwen-Image-2512** are released. Check [HuggingFace](https://huggingface.co/nvidia/PiD).
@@ -38,6 +39,7 @@ space and produces a super-resolved image in one pass.
 - [Running inference with released checkpoints](#running-inference-with-released-checkpoints)
   - [LDM → PiD decode](#from-ldm)
   - [image → PiD decode](#from-clean)
+  - [Optional Boogu-Image](docs/boogu_image.md)
 - [Training](#training)
 - [Repository layout](docs/repository_layout.md)
 
@@ -84,6 +86,13 @@ PiD ships two complementary entry points, each selecting a backbone with `--back
 
 - `from_ldm.py`  — text/class → latent diffusion → PiD decode
 - `from_clean.py` — image → VAE encode → PiD decode
+
+It also includes an optional Boogu-Image text-to-image helper:
+
+- `from_boogu.py` — Boogu-Image text → image, using Boogu's own decoder and optionally Flux1 PiD decode.
+
+Boogu has extra dependencies and should be installed only when needed. See
+[`docs/boogu_image.md`](docs/boogu_image.md) for setup and examples.
 
 > [!IMPORTANT]
 > Picking the checkpoint variant — `--pid_ckpt_type`
@@ -229,6 +238,27 @@ The `dinov2` / `siglip` `from_clean` flows take the same flags but with a differ
 `--scale` (8 for `siglip`); their encoders resize internally to their fixed native
 interface (512 / 256) regardless of the input image size — see
 [`docs/dinov2_siglip.md`](docs/dinov2_siglip.md).
+
+### `from_boogu`: Boogu-Image text → image
+
+Boogu-Image uses its own custom pipeline and a Flux1-style VAE, so it is kept as
+an optional integration rather than a base dependency. After following
+[`docs/boogu_image.md`](docs/boogu_image.md), you can run Boogu native T2I or add
+`--pid_decode` to capture Boogu's final normalized Flux1 latent and run the
+Flux1 PiD pixel decoder:
+
+```bash
+PYTHONPATH=.:third_party/Boogu-Image python -m pid._src.inference.from_boogu \
+    --variant turbo \
+    --prompt "A tiny ceramic robot watering a bonsai tree" \
+    --resolution 512 \
+    --enable_model_cpu_offload \
+    --pid_decode \
+    --output_dir ./results/boogu/turbo_pid
+```
+
+See [`docs/boogu_image.md`](docs/boogu_image.md) for optional dependency setup,
+batch/torchrun examples, and environment notes.
 
 ## Training
 
