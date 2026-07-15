@@ -25,7 +25,7 @@ space and produces a super-resolved image in one pass.
 
 ## News
 - 🚀 [July 14, 2026] PiD adds optional [**Boogu-Image**](docs/boogu_image.md) text-to-image support, including Boogu native generation and **Flux1 PiD decode** from Boogu's Flux-style VAE latents.
-- 🚀 [July 9, 2026] PiD Training code released, with [PiD v1.5 and PixelDiT (2kto4k)](https://huggingface.co/nvidia/PiD/commit/3348c59bb545d9d0e29c2dec4c79b94592b83e8c) **distilled** and **undistilled** checkpoints!
+- 🚀 [July 9, 2026] PiD Training code released, with [PixelDiT and PiD v1.5 (2kto4k)](https://huggingface.co/nvidia/PiD/commit/3348c59bb545d9d0e29c2dec4c79b94592b83e8c) **distilled** and **undistilled** checkpoints!
 - 🚀 [July 9, 2026] PiD **v1.5** checkpoints for **FLUX** (**Z-Image**, **Z-Image-Turbo**), **FLUX.2**,  and **Qwen-Image** are released. Check [release page](https://research.nvidia.com/labs/sil/projects/pid/comparison.html) to see improvements!
 - 🔥 [June 2, 2026] PiD checkpoints for **SDXL**, **Qwen-Image** and **Qwen-Image-2512** are released. Check [HuggingFace](https://huggingface.co/nvidia/PiD).
 - 🔥 [June 2, 2026] We clean up the codebase and remove useless code. Torch.compile mode is also available now.
