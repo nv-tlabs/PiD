@@ -24,7 +24,7 @@ space and produces a super-resolved image in one pass.
 [Xuanchi Ren](https://xuanchiren.com/) <br>
 
 ## News
-- 🚀 [July 14, 2026] PiD adds optional [**Boogu-Image**](docs/boogu_image.md) text-to-image support, including Boogu native generation and **Flux1 PiD decode** from Boogu's Flux-style VAE latents.
+- 🚀 [July 14, 2026] PiD adds optional [Boogu-Image](docs/boogu_image.md) text-to-image support, including Boogu native generation and PiD decode from Boogu's Flux-style VAE latents.
 - 🚀 [July 9, 2026] PiD Training code released, with [PixelDiT and PiD v1.5 (2kto4k)](https://huggingface.co/nvidia/PiD/commit/3348c59bb545d9d0e29c2dec4c79b94592b83e8c) **distilled** and **undistilled** checkpoints!
 - 🚀 [July 9, 2026] PiD **v1.5** checkpoints for **FLUX** (**Z-Image**, **Z-Image-Turbo**), **FLUX.2**,  and **Qwen-Image** are released. Check [release page](https://research.nvidia.com/labs/sil/projects/pid/comparison.html) to see improvements!
 - 🔥 [June 2, 2026] PiD checkpoints for **SDXL**, **Qwen-Image** and **Qwen-Image-2512** are released. Check [HuggingFace](https://huggingface.co/nvidia/PiD).
@@ -82,17 +82,10 @@ hf download nvidia/PiD --local-dir . --include "checkpoints/*"
 
 ## Running inference with released checkpoints
 
-PiD ships two complementary entry points, each selecting a backbone with `--backbone`:
+PiD ships two main entry points, each selecting a backbone with `--backbone`:
 
 - `from_ldm.py`  — text/class → latent diffusion → PiD decode
 - `from_clean.py` — image → VAE encode → PiD decode
-
-It also includes an optional Boogu-Image text-to-image helper:
-
-- `from_boogu.py` — Boogu-Image text → image, using Boogu's own decoder and optionally Flux1 PiD decode.
-
-Boogu has extra dependencies and should be installed only when needed. See
-[`docs/boogu_image.md`](docs/boogu_image.md) for setup and examples.
 
 > [!IMPORTANT]
 > Picking the checkpoint variant — `--pid_ckpt_type`
